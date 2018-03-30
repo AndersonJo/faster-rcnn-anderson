@@ -73,15 +73,41 @@ Region Proposal Network (RPN)은 convolution을 사용하여 구현이 되며, i
 
 Sliding window를 통해서 나온 feature map의 depth는 더 낮은 차원이 됩니다. (예. 512 depth --> 256 depth) 이후의 output값은 1 x 1 kernel을 갖고 있는 두개의 convolutional layers로 양분되어 들어가게 됩니다.  
 
-**Classification layer**에서는 anchor당 2개의 predictions값을 내놓으며, background인지 아니면 object 인지를 score값으로 구분합니다. 
+**Classification layer**에서는 anchor당 2개의 predictions값을 내놓으며, 객체인지 아니면 객체가 아닌지(그냥 배경인지)에 관한 확률값입니다.
 
 **Regression layer** (또는 bounding box adjustment layer)는 각 anchor당 델타값들 $ \Delta_{x_{\text{center}}} $, $ \Delta_{y_{\text{center}}} $,  $ \Delta_{\text{width}} $, $ \Delta_{\text{height}} $  4개의 값을 내놓습니다. 이 델타 값들은 anchors에 적용이 되어서 최종 proposals을 얻게 됩니다. 
 
 
 
-![RPN Conv Output](images/sliding-window.png)
+![RPN Conv Output](images/sliding-window.png)```
 
 
 
-## Anchors 
+### Classifier of Background and Foreground 
+
+**Classifier**를 학습시키기 위한 training data는 바로 위의 **RPN으로 부터 얻은 anchors** 와 **ground-truth boxes** (실제 사람이 집접 박스 처리한 데이터) 입니다. 
+
+모든 anchors를 foreground 이냐 또는 background이냐로 분류를 해야 합니다. 
+분류를 하는 기준은 어떤 anchor가 ground-truth box와 오버랩 (중복되는 면적)되는 부분이 크면 foreground이고, 적으면 background입니다. 각각의 anchor마다 foreground인지 아니면 background인지 구별하는 값을  $ p^* $ 값이라고 했을때 구체적인 공식은 다음과 같습니다. 
+
+
+
+$$ \begin{equation} p^* = \begin{cases} 1 & \text{if } IoU \gt 0.7 \\ -1 & \text{if } IoU \lt 0.3 \\ 0 & \text{if otherwise}  \end{cases}  \end{equation} $$
+
+
+
+여기서 IoU는 Intersection over Union으로서 다음과 같이 정의가 됩니다. 
+자세한 내용은 [여기](https://www.pyimagesearch.com/2016/11/07/intersection-over-union-iou-for-object-detection/) 를 참고 합니다. 
+
+$$ \begin{equation} IoU = \frac{\text{anchor } \cap \text{ ground-truth box}}{\text{anchor } \cup \text{ ground-truth box}} \end{equation} $$
+
+일반적으로 IoU값이 가장 높은 값을 1값으로 잡으면 되지만.. 정말 레어한 케이스에서 잘 잡히지 않는 경우 0.7이상으로 해서 잡으면 됩니다. 또한 하나의 ground-truth box는 여러개의 anchors에 anchors에 1값을 줄 수 가 있습니다.  또한 0.3 이하의 값으로 떨어지는 anchor는 -1값을 줍니다. 그외 IoU 값이 높지도 정확하게 낮지도 않은 anchors들 같은 경우는 학습시 사용되지 않는... 그냥 아무취급도 안하면 됩니다. 
+
+
+
+
+
+
+
+**Binary classification**을 학습시 문제는 어떻게 ground-truth boxes (실제 사물이 들어있는 박스 영역)를 이용하여 각각의 anchor에 레이블링 시키는가 입니다. 
 
