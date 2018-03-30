@@ -30,7 +30,7 @@ Faster R-CNN은 두개의 네트워크로 구성이 되어 있습니다.
 Faster R-CNN안에는 2개의 모듈이 존재하지만, 전체적으로는 하나의 object detection network라고 볼 수 있습니다.
 이게 중요한 이유는 Fater R-CNN이후부터 **fully differentiable model**이기 때문입니다.
 
-![Faster R-CNN](images/faster-rcnn.png)
+![Faster R-CNN](images/faster-rcnn-architecture.png)
 
 
 가장 상위단서부터 큰 그림을 그리면서 세부적인 부분을 설명하도록 하겠습니다. 
@@ -83,7 +83,7 @@ Sliding window를 통해서 나온 feature map의 depth는 더 낮은 차원이 
 
 
 
-### Classifier of Background and Foreground 
+## Classifier of Background and Foreground 
 
 **Classifier**를 학습시키기 위한 training data는 바로 위의 **RPN으로 부터 얻은 anchors** 와 **ground-truth boxes** (실제 사람이 집접 박스 처리한 데이터) 입니다. 
 
@@ -99,9 +99,17 @@ $$ \begin{equation} p^* = \begin{cases} 1 & \text{if } IoU \gt 0.7 \\ -1 & \text
 여기서 IoU는 Intersection over Union으로서 다음과 같이 정의가 됩니다. 
 자세한 내용은 [여기](https://www.pyimagesearch.com/2016/11/07/intersection-over-union-iou-for-object-detection/) 를 참고 합니다. 
 
+
+
 $$ \begin{equation} IoU = \frac{\text{anchor } \cap \text{ ground-truth box}}{\text{anchor } \cup \text{ ground-truth box}} \end{equation} $$
 
-일반적으로 IoU값이 가장 높은 값을 1값으로 잡으면 되지만.. 정말 레어한 케이스에서 잘 잡히지 않는 경우 0.7이상으로 해서 잡으면 됩니다. 또한 하나의 ground-truth box는 여러개의 anchors에 anchors에 1값을 줄 수 가 있습니다.  또한 0.3 이하의 값으로 떨어지는 anchor는 -1값을 줍니다. 그외 IoU 값이 높지도 정확하게 낮지도 않은 anchors들 같은 경우는 학습시 사용되지 않는... 그냥 아무취급도 안하면 됩니다. 
+
+
+일반적으로 IoU값이 가장 높은 값을 1값으로 잡으면 되지만.. 정말 레어한 케이스에서 잘 잡히지 않는 경우 0.7이상으로 해서 잡으면 됩니다. 또한 하나의 ground-truth box는 여러개의 anchors에 anchors에 1값을 줄 수 가 있습니다.  또한 0.3 이하의 값으로 떨어지는 anchor는 -1값을 줍니다. 그외 IoU 값이 높지도 정확하게 낮지도 않은 anchors들 같은 경우는 학습시 사용되지 않는... 그냥 아무취급도 안하면 됩니다. (태스크에 따라서 0.7이상이냐 0.3이하냐는 언제든지 바뀔 수 있습니다.)
+
+
+
+
 
 
 
