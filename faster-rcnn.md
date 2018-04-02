@@ -2,7 +2,7 @@
 
 # What is Faster R-CNN
 
-Deep learning에 처음 들어온 사람들은 보통 MNIST 데이터를 갖고서 딥러닝으로 손글씨를 인식하는 모델을 만듭니다. 하지만 실제 인간이 접하는 비젼의 문제는 이것보다 훨씬 까다롭습니다.  아래 사진은 뉴욕의 사진입니다. 엄청나게 많은 사람들, 차량, 광고, 건물, 신호등 등등 엄청나게 복잡한 사물들로 이루어져 있습니다. 
+Deep learning에 처음 들어온 사람들은 보통 MNIST 데이터를 갖고서 딥러닝으로 손글씨를 인식하는 모델을 만듭니다. 하지만 실제 인간이 접하는 비젼의 문제는 이것보다 훨씬 까다롭습니다.  아래 사진은 뉴욕의 사진입니다. 엄청나게 많은 사람들, 차량, 광고, 건물, 신호등 등등의 복잡한 객체들로 이루어져 있습니다. 
 
 ![NewYork](images/new-york.jpg)
 
@@ -83,7 +83,7 @@ Sliding window를 통해서 나온 feature map의 depth는 더 낮은 차원이 
 
 
 
-## Classifier of Background and Foreground 
+### Classifier of Background and Foreground 
 
 **Classifier**를 학습시키기 위한 training data는 바로 위의 **RPN으로 부터 얻은 anchors** 와 **ground-truth boxes** (실제 사람이 집접 박스 처리한 데이터) 입니다. 
 
@@ -107,15 +107,95 @@ $$ \begin{equation} IoU = \frac{\text{anchor } \cap \text{ ground-truth box}}{\t
 
 일반적으로 IoU값이 가장 높은 값을 1값으로 잡으면 되지만.. 정말 레어한 케이스에서 잘 잡히지 않는 경우 0.7이상으로 해서 잡으면 됩니다. 또한 하나의 ground-truth box는 여러개의 anchors에 anchors에 1값을 줄 수 가 있습니다.  또한 0.3 이하의 값으로 떨어지는 anchor는 -1값을 줍니다. 그외 IoU 값이 높지도 정확하게 낮지도 않은 anchors들 같은 경우는 학습시 사용되지 않는... 그냥 아무취급도 안하면 됩니다. (태스크에 따라서 0.7이상이냐 0.3이하냐는 언제든지 바뀔 수 있습니다.)
 
+### Bounding Box Regression
+
+Bounding box regression에는 4개의 좌표값을 사용합니다. 
+$ t $ 라는 값 자체가 4개의 좌표값을 갖고 있는 하나의 벡터라고 보면 되며 다음과 같은 엘러먼트 값을 갖고 있습니다. 
+
+$$ \begin{align} t_x &= (x - x_a) / w_a \\ t_y &= (y - y_a) / h_a \\ t_w &= \log(w/w_a) \\ t_h &= \log(h/h_a) \end{align} $$
+
+ground-truth vector $ t^* $ 에는 위와 유사하게 다음과 같은 값을 갖고 있습니다. 
+
+$$ \begin{align} t^*_x &= (x^* - x_a) / w_a \\ t^*_y &= (y^* - y_a) / h_a \\ t^*_w &= \log(w^*/w_a) \\ t^*_h &= \log(h^*/h_a) \end{align} $$
+
+
+
+* $ t_x, t_y $ : 박스의 center coordinates 
+* $ t_w, t_h $ : 박스의 width, height
+* $ x, y, w, h$ : predicted box
+* $ x_a, y_a, w_a, h_a $ : anchor box 
+* $ x^*, y^*, w^*, h^* $ : ground-truth box
+
+
+
+## Region of Interest Pooling
+
+> 아래의 내용은 [링크](https://blog.deepsense.ai/region-of-interest-pooling-explained/)에서 참고하였습니다.
+
+RPN에서 proposals들이 실제 객체와 overlapping되기 때문에 다수의 proposals이 나오게 됩니다. 또한 proposed regions 은 서로 다른 크기를 갖고 있으므로, CNN feature maps또한 크기가 제각각일 것 입니다. 아래의 그림에서 proposed regions 들은 모두 제각각의 크기를 갖고 있으며, 하나의 객체에 여러개의 proposals이 있는 상태입니다. 
+
+![Region Proposed Cat](images/region_proposal_cat.png)
+
+또한 RPN에서는 아직까지 object (positive)이냐 아니면 background (negative)이냐를 판별만 했지, 해당 객체가 "비행기", "고양이", "사람", "자동차" 처럼 아직까지 분류를 한 상태는 아닙니다. 
+
+가장 쉽게 해결할수 있는 방법은 이미 해당 분류 작업을 미리 학습한 모델을 사용하는 것입니다. 하지만 이 경우 예를 들어서 2000개의 proposals이 있는 경우 2000번 모델을 돌려야 하기 때문에 비현실적이며, 중복된 proposals을 거르지도 못합니다. 
+
+
+
+Region of Interest Pooling을 하게 되면 다음과 같은 이점을 얻을 수 있습니다. 
+
+* 서로 다른 feature maps을 동일한 크기의 값으로 얻음
+* ​
 
 
 
 
 
+# Training
+
+## Loss Function
+
+$$  L(\{p_i\}, \{t_i\}) = \frac{1}{N_{cls}} \sum_i L_{cls} (p_i, p^*_i) + \lambda \frac{1}{N_{reg}} \sum_i p^*_i L_{reg} (t_i, t^*_i) $$
+
+* $ i $ : mini-batch 안에서의 anchor의 index
+* $ p_i $ : anchor $ i $ 가 객체인지 배경인지의 예측값
+* $ p^*_i $ : ground-truth label 로서 1이면 해당 anchor가 positive(객체)라는 뜻이고, 0이면 negative(배경)
+* $ t_i $ : 4개의 bounding box의 값을 갖고 있는 벡터
+* $ t^*_i $ : ground-truth box 로서 positive anchor와 관련되어 있다.
+* $ L_{cls} $  : log loss (object 냐 또는 아냐냐.. 두 클래스간의 손실 함수)
+* $ L_{reg} $ : smooth l1 loss function (오직 positive anchors $ p^*_i = 1 $ 에만 사용됨.)
+* $ N_{cls} $ : normalization. mini-batch 크기와 동일 (i.e. $ N_{cls} = 256 $)
+* $ N_{reg} $ : normalization. anchor locations의 갯수와 동일 (i.e. $ N_{reg} \sim 2400 $ )
+* $ \lambda $ : 기본값으로 10 (목표는 cls 그리고 reg 둘다 거의 동등하게 가중치를 갖도록. 이 값에 따라서 학습의 결과가 매우 달라질수 있다.)
 
 
 
+$ N_{reg} $ 는 Smooth L1 function의 공식을 사용합니다. 
+Smooth L1의 경우 L1과 동일하지만, error의 값이 충분히 작을 경우 거의 맞는 것으로 판단하며, loss값은 더 빠른 속도로 줄어들게 됩니다. 
+
+ $$  \text{smooth}_{L1}(x) = \begin{cases} 0.5 x^2 & \text{if } |x| \lt 1 \\ |x| - 0.5 & \text{otherwise} \end{cases} $$
 
 
-**Binary classification**을 학습시 문제는 어떻게 ground-truth boxes (실제 사물이 들어있는 박스 영역)를 이용하여 각각의 anchor에 레이블링 시키는가 입니다. 
 
+## Training RPN
+
+하나의 이미지에서 random 으로 256개(batch 크기)의 anchors를 샘플링합니다. 
+이때 positive anchors(객체)와 negative anchors(배경)의 비율은 1:1이 되도록 합니다. 만약 그냥 랜덤으로 진행시, negative anchors의 갯수가 더 많기 때문에 학습은 어느 한쪽으로 편향되게 학습이 될 것입니다. 
+
+하지만 현실적으로 1:1 비율을 지속적으로 유지시키는 것은 매우 어렵습니다. 대부분의 경우 positive samples의 갯수가 128개를 넘지 못하는 경우인데, 이 경우 zero-padding을 시켜주거나, 아예 없는 경우는 IoU값이 가장 높은 값을 사용하기도 합니다. 
+
+페이퍼에서는 추가되는 새로운 레이어의 weights값은 0 mean, 0.01 standard deviation을 갖고 있는 gaussian distribution으로 부터 초기화를 합니다 (BaseNet 에 해당되는 ImageNet 을 제외, 즉 pre-trained model을 사용하기 때문에). Learning rate의 경우 처음 60k mini-batches에 대해서는 0.001, 그 다음 20k mini-batches에 대해서는 0.0001을 PASCAL VOC dataset에 적용을 합니다. 
+
+
+
+# Inference
+
+## Non-Maximum Suppression 
+
+Faster R-CNN에 대한 학습이 완료된 후, RPN 모델을 예측시키면 아마도 한 객체당 여러개의 proposals (bounding boxes) 값을 얻을 것 입니다. 이유는 anchors자체가 어떤 객체에 중복이 되기 때문에 proposals 또한 여러개가 되는 것 입니다. 
+
+문제를 해결하기 위해서 non-maximum suppression (NMS) 알고리즘을 사용해서 proposals의 갯수를 줄이도록 합니다. NMS를 간단히 설명하면 먼저 IoU값으로 proposals을 모두 정렬시켜놓은뒤,  RoI점수가 가장 높은 proposal과 다른 proposals에 대해서 overlapping을 비교한뒤 overlapping이 높은 것은 특정 threshold이상이면 지워버리며 이 과정을 iterate돌면서 삭제시킵니다. 
+
+직관적으로 설명하면 RoI가 높은 bounding box가 있는데.. 이 놈하고 overlapping 되는 녀석들중 특정 threshold이상이면 proposals에서 삭제시켜버리는 형태입니다. 그러면 서로 오버랩은 되지 않으면서 RoI가 높은 녀석들만 남게 됩니다. 
+
+![NMS](images/nms_algo.jpg)
