@@ -130,24 +130,56 @@ $$ \begin{align} t^*_x &= (x^* - x_a) / w_a \\ t^*_y &= (y^* - y_a) / h_a \\ t^*
 
 ## Region of Interest Pooling
 
+RPN이후, 서로 다른 크기의 proposed regions값을 output으로 받습니다.
+서로 다른 크기라는 말은 CNN에서 output으로 나온 feature maps또는 제각각 다른 크기라는 뜻입니다.  특히 일반적으로 feature maps을 flatten시켜서 딥러닝을 태워서 추후 classification을 할때는 더더욱 어렵게 됩니다.
+
+이때 사용하는 기법이 Region of Interest Pooling(ROI) 기법입니다.
+ROI를 사용하게 되면 서로 다른 크기의 feature maps을 동일한 크기로 변환시켜줄수 있습니다. 
+
+### How it works
+
 > 아래의 내용은 [링크](https://blog.deepsense.ai/region-of-interest-pooling-explained/)에서 참고하였습니다.
 
-RPN에서 proposals들이 실제 객체와 overlapping되기 때문에 다수의 proposals이 나오게 됩니다. 또한 proposed regions 은 서로 다른 크기를 갖고 있으므로, CNN feature maps또한 크기가 제각각일 것 입니다. 아래의 그림에서 proposed regions 들은 모두 제각각의 크기를 갖고 있으며, 하나의 객체에 여러개의 proposals이 있는 상태입니다. 
+ROI를 구현하기 위해서는 다음의 2개의 inputs이 필요합니다.
+
+1. Deep convolutions 그리고 max pooling layers를 통해 나온 feature map
+2. N x 4 매트릭스 -> N은 RoI의 갯수, 4는 region의 위치를 나타내는 coordinates
+
+> 아래의 그림은 region proposals (핑크 직사각형) 이 포함된 이미지 입니다. 
 
 ![Region Proposed Cat](images/region_proposal_cat.png)
 
-또한 RPN에서는 아직까지 object (positive)이냐 아니면 background (negative)이냐를 판별만 했지, 해당 객체가 "비행기", "고양이", "사람", "자동차" 처럼 아직까지 분류를 한 상태는 아닙니다. 
+ROI 가 로직은 다음과 같습니다. 
 
-가장 쉽게 해결할수 있는 방법은 이미 해당 분류 작업을 미리 학습한 모델을 사용하는 것입니다. 하지만 이 경우 예를 들어서 2000개의 proposals이 있는 경우 2000번 모델을 돌려야 하기 때문에 비현실적이며, 중복된 proposals을 거르지도 못합니다. 
+1. 각각의 region proposal을 동일한 크기의 sections으로 나눕니다. (section의 크기는 RoI pooling의 output크기가 동일합니다.)
+2. 각각의 section마다 가장 큰 값을 찾습니다. 
+3. 각각의 찾은 maximum값을 output 으로 만듭니다. 
 
+### Region of Interest Pooling Example 
 
+> [링크](https://blog.deepsense.ai/region-of-interest-pooling-explained/)에서 가져온 내용입니다. 
 
-Region of Interest Pooling을 하게 되면 다음과 같은 이점을 얻을 수 있습니다. 
+예를 들어서 8 x 8 형태의 feature map을 다음과 같이 있다고 가정합니다. 
 
-* 서로 다른 feature maps을 동일한 크기의 값으로 얻음
-* ​
+![Feature Map](images/roi-pooling1.jpg)
 
+Region proposal의 값은 (0, 3), (7, 8) 일때 다음과 같습니다. 
 
+![Region Proposal](images/roi-pooling2.jpg)
+
+실제로는 수십~수천장의 feature maps을 갖고 있겠지만, 예제에서는 문제를 간단하게 하기 위해서 1개의 feature map만 있다고 가정을 합니다. 
+
+Section의 크기 2 x 2 로 region proposal을 아래와 같이 나눕니다. 
+
+![Divied by Sections](images/roi-pooling3.jpg)
+
+위에서 보다시피 section의 크기는 모두 동일할 필요는 없습니다. 다만 크기가 거의 동일하기만 하면 됩니다. 
+
+Max values를 끄집어 내면 다음과 같은 output이 생성이 됩니다. 
+
+![RoI Pooling Output](images/roi-pooling4.jpg)
+
+> 물론 Region of Interest Pooling을 사용할수도 있지만 아래쪽에 더 쉽게 구현 가능한 방법을 아래에 "Fixed-size Resize instead of ROI Pooling" 이름으로 정리해놨습니다. 
 
 
 
@@ -188,7 +220,7 @@ Smooth L1의 경우 L1과 동일하지만, error의 값이 충분히 작을 경�
 
 
 
-# Inference
+# Processing Tips
 
 ## Non-Maximum Suppression 
 
@@ -198,4 +230,27 @@ Faster R-CNN에 대한 학습이 완료된 후, RPN 모델을 예측시키면 �
 
 직관적으로 설명하면 RoI가 높은 bounding box가 있는데.. 이 놈하고 overlapping 되는 녀석들중 특정 threshold이상이면 proposals에서 삭제시켜버리는 형태입니다. 그러면 서로 오버랩은 되지 않으면서 RoI가 높은 녀석들만 남게 됩니다. 
 
+일반적으로 threshold의 값은 0.6~0.9 정도로 합니다. 
+
 ![NMS](images/nms_algo.jpg)
+
+> NMS 는 training시에도 학습 속도를 높이기 위해서 사용 할 수 있습니다. 
+
+
+
+## ROI-Removed Model 
+
+만약 구분해야 될 클래스가 1개밖에 없을때는 RPN만 사용해서 구현이 가능합니다. 
+객체인지 아니면 배경인지를 구분하는 classifier자체를 사용해서 클래스를 구별해주면 됩니다. 
+
+비젼에서 가장 대표적인 예가 face detection 그리고 text detection등이 있습니다. 
+RPN만 사용하게 됨으로 당연히 training 그리고 inference의 속도는 매우 빨라지게 됩니다. 
+
+
+
+## Fixed-size Resize instead of ROI Pooling  
+
+Region of Interest Pooling 대신 object detection을 실제 구현할때 그냥 더 많이 쓰이고 쉬운 방법이 있습니다. 
+각각의 convolutional feature map을 각각의 proposal로 crop을 시킨뒤에, copped된 이미지를 고정된 크기 14 x 14 x depth 로 interpolation (보통 bilinear)을 사용하여 resize 시킵니다. 이후 2 x 2 kernel을 사용하여 7 x 7 x depth 형태의 feature map으로 max pooling시켜줍니다. 
+
+위에서 사용된 크기나 값들은 그 다음에 사용될 block (보통 fully-connected dense layer)에 따라서 결정됨으로 다양하게 바뀔수 있습니다.
