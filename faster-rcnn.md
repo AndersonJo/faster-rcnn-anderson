@@ -79,7 +79,7 @@ Sliding window를 통해서 나온 feature map의 depth는 더 낮은 차원이 
 
 
 
-![RPN Conv Output](images/sliding-window.png)```
+![RPN Conv Output](images/sliding-window.png)
 
 
 
