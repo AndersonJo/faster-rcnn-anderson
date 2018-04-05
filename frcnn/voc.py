@@ -1,5 +1,6 @@
 # -*- coding:utf-8 -*-
 import os
+from os.path import dirname
 import xml.etree.ElementTree as ET
 
 
@@ -50,9 +51,8 @@ class PascalVocData(object):
         self.voc_paths = [os.path.join(self.voc_root_path, voc_name) for voc_name in self.voc_names]
         self.voc_paths = list(filter(lambda p: os.path.exists(p), self.voc_paths))
 
-        # train and test image absolute paths
-        train_files = list()
-        test_files = list()
+        # Read test file names from test.txt or val.txt
+        # _test_file_names: it only has list of image file names; not as absolute paths
         _test_file_names = list()
         for voc_path in self.voc_paths:
             _test = [os.path.join(voc_path, 'ImageSets', 'Main', t) for t in self.TEST_FILES]
@@ -64,42 +64,38 @@ class PascalVocData(object):
             with open(_test) as f:
                 for line in f:
                     _test_file_names.append(line.strip() + '.jpg')
-            #
-            # img_root_path = os.path.join(voc_path, 'JPEGImages')
-            # for img_name in os.listdir(img_root_path):
-            #     img_path = os.path.join(img_root_path, img_name)
-            #     if img_name in _test_file_names:
-            #         test_files.append(img_path)
-            #     else:
-            #         train_files.append(img_path)
-        print(_test_file_names)
-        # Annotation absolute paths
-        # i.e. ['/data/VOCdevkit/VOC2007/Annotations/004134.xml', ...]
-
-        # JPEG Image absolute paths
-        image_paths = list()
-        for voc_path in self.voc_paths:
-            _p = os.path.join(voc_path, 'JPEGImages')
-            image_paths += [os.path.join(_p, n) for n in os.listdir(_p)]
 
         # Make annotation data
-        annotation_paths = list()
+        train = list()
+        test = list()
         for voc_path in self.voc_paths:
-            _annot_path = os.path.join(voc_path, 'Annotations')
-            annotation_paths += [os.path.join(_annot_path, a) for a in os.listdir(_annot_path)]
+            _annot_dir_path = os.path.join(voc_path, 'Annotations')
 
-            for annot_path in annotation_paths:
+            _annotation_paths = [os.path.join(_annot_dir_path, a) for a in os.listdir(_annot_dir_path)]
+
+            for annot_path in _annotation_paths:
                 annot = self.parse_annotation(annot_path)
-                print(annot)
-                break
 
-    def parse_annotation(self, annot_path: str) -> dict:
+                print(annot['image'], os.path.exists(annot['image']))
+                # assert os.path.exists(annot['image'])
+
+                if annot['filename'] in _test_file_names:
+                    test.append(annot)
+                else:
+                    train.append(annot)
+
+    @staticmethod
+    def parse_annotation(annot_path: str) -> dict:
         """
         It parses XML VOC annotation file.
         :param annot_path: full path of annotation file
+        :param validation: it should be used only for data integrity test
         :return annotation information as dictionary
         """
         annot = dict()
+
+        # Set absolute path
+        _img_dir_path = os.path.join(dirname(dirname(annot_path)), 'JPEGImages')
 
         # Set default information
         et: ET.ElementTree = ET.parse(annot_path)
@@ -108,8 +104,9 @@ class PascalVocData(object):
         annot['filename'] = el.find('filename').text
         annot['width'] = int(el.find('size').find('width').text)
         annot['height'] = int(el.find('size').find('height').text)
-        annot['objects'] = list()
+        annot['image'] = os.path.join(_img_dir_path, annot['filename'])  # absolute image path
 
+        annot['objects'] = list()
         object_els = el.findall('object')
         for el_object in object_els:
             obj = dict()
