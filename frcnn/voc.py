@@ -1,10 +1,21 @@
 # -*- coding:utf-8 -*-
 import os
-from os.path import dirname
 import xml.etree.ElementTree as ET
+from abc import ABC, abstractmethod
+from os.path import dirname
+from typing import Tuple
+
+import cv2
 
 
-class PascalVocData(object):
+class BaseData(ABC):
+
+    @abstractmethod
+    def load_data(self):
+        raise NotImplementedError
+
+
+class PascalVocData(BaseData):
     # VOC2007 uses test.txt as test data
     # VOC2017 uses val.txt as test data
     TEST_FILES = ('test.txt', 'val.txt')
@@ -40,9 +51,7 @@ class PascalVocData(object):
         self.voc_root_path: str = voc_root_path
         self.voc_names: list = voc_names
 
-        self._init()
-
-    def _init(self) -> None:
+    def load_data(self) -> Tuple[list, list, dict]:
         """
         Initialization method
         """
@@ -68,21 +77,24 @@ class PascalVocData(object):
         # Make annotation data
         train = list()
         test = list()
+        classes = dict()
         for voc_path in self.voc_paths:
             _annot_dir_path = os.path.join(voc_path, 'Annotations')
-
             _annotation_paths = [os.path.join(_annot_dir_path, a) for a in os.listdir(_annot_dir_path)]
 
             for annot_path in _annotation_paths:
                 annot = self.parse_annotation(annot_path)
 
-                print(annot['image'], os.path.exists(annot['image']))
-                # assert os.path.exists(annot['image'])
-
                 if annot['filename'] in _test_file_names:
                     test.append(annot)
                 else:
                     train.append(annot)
+
+                for o in annot['objects']:
+                    classes.setdefault(o['name'], 0)
+                    classes[o['name']] += 1
+
+        return train, test, classes
 
     @staticmethod
     def parse_annotation(annot_path: str) -> dict:
@@ -113,10 +125,28 @@ class PascalVocData(object):
 
             obj['name'] = el_object.find('name').text
             bbox = el_object.find('bndbox')
-            obj['xmin'] = int(bbox.find('xmin').text)
-            obj['ymin'] = int(bbox.find('ymin').text)
-            obj['xmax'] = int(bbox.find('xmax').text)
-            obj['ymax'] = int(bbox.find('ymax').text)
+            obj['xmin'] = int(float(bbox.find('xmin').text))
+            obj['ymin'] = int(float(bbox.find('ymin').text))
+            obj['xmax'] = int(float(bbox.find('xmax').text))
+            obj['ymax'] = int(float(bbox.find('ymax').text))
             annot['objects'].append(obj)
 
         return annot
+
+    @staticmethod
+    def visualize_img(annot: dict, file: str = None):
+        """
+        The method creates bounding boxes in the target image
+        and saves the image to disk if `file` string argument is provided
+
+        :param annot: An annotation dictionary data
+        :param file: output file name; where to save the image file?
+        :return:
+        """
+
+        img = cv2.imread(annot['image'])
+        for bbox in annot['objects']:
+            cv2.rectangle(img, (bbox['xmin'], bbox['ymin']), (bbox['xmax'], bbox['ymax']), (0, 0, 255))
+        if file:
+            cv2.imwrite(file, img)
+        return img

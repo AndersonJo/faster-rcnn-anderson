@@ -1,10 +1,6 @@
-import gc
-from time import sleep
-
 import numpy as np
-from keras import backend as K
 from keras import Model
-from keras.datasets.cifar10 import load_data
+from keras import backend as K
 
 from frcnn.net import get_basenet
 
