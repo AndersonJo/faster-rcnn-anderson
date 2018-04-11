@@ -48,11 +48,12 @@ class PascalVocData(BaseData):
         │   └── SegmentationObject
         =======================================
         """
-        self.voc_root_path: str = voc_root_path
-        self.voc_names: list = voc_names
+        self.voc_root_path = voc_root_path
+        self.voc_names = voc_names
 
-    def load_data(self) -> Tuple[list, list, dict]:
+    def load_data(self, limit_size: int = None) -> Tuple[list, list, dict]:
         """
+        :param limit_size: limit the size of dataset. only use it for debug.
         Initialization method
         """
         # VOC data absolute paths
@@ -79,6 +80,9 @@ class PascalVocData(BaseData):
         test = list()
         classes = dict()
         for voc_path in self.voc_paths:
+            if limit_size is not None and len(train) >= limit_size and len(test) >= limit_size:
+                break
+
             _annot_dir_path = os.path.join(voc_path, 'Annotations')
             _annotation_paths = [os.path.join(_annot_dir_path, a) for a in os.listdir(_annot_dir_path)]
 
@@ -91,8 +95,8 @@ class PascalVocData(BaseData):
                     train.append(annot)
 
                 for o in annot['objects']:
-                    classes.setdefault(o['name'], 0)
-                    classes[o['name']] += 1
+                    classes.setdefault(o[0], 0)
+                    classes[o[0]] += 1
 
         return train, test, classes
 
@@ -110,8 +114,8 @@ class PascalVocData(BaseData):
         _img_dir_path = os.path.join(dirname(dirname(annot_path)), 'JPEGImages')
 
         # Set default information
-        et: ET.ElementTree = ET.parse(annot_path)
-        el: ET.ElementTree = et.getroot()
+        et = ET.parse(annot_path)
+        el = et.getroot()
 
         annot['filename'] = el.find('filename').text
         annot['width'] = int(el.find('size').find('width').text)
@@ -121,15 +125,16 @@ class PascalVocData(BaseData):
         annot['objects'] = list()
         object_els = el.findall('object')
         for el_object in object_els:
-            obj = dict()
+            class_name = el_object.find('name').text
 
-            obj['name'] = el_object.find('name').text
             bbox = el_object.find('bndbox')
-            obj['xmin'] = int(float(bbox.find('xmin').text))
-            obj['ymin'] = int(float(bbox.find('ymin').text))
-            obj['xmax'] = int(float(bbox.find('xmax').text))
-            obj['ymax'] = int(float(bbox.find('ymax').text))
-            annot['objects'].append(obj)
+            x1 = int(float(bbox.find('xmin').text))
+            x2 = int(float(bbox.find('xmax').text))
+            y1 = int(float(bbox.find('ymin').text))
+            y2 = int(float(bbox.find('ymax').text))
+
+            _object = [class_name, x1, x2, y1, y2]
+            annot['objects'].append(_object)
 
         return annot
 
