@@ -1,12 +1,16 @@
-from frcnn.anchor import Anchor
+from frcnn.preprocessing import Anchor
 from frcnn.voc import PascalVocData
 from tests import DATASET_ROOT_PATH
 
 
 def test_anchor():
-    voc = PascalVocData(DATASET_ROOT_PATH)
-    train, test, classes = voc.load_data(limit_size=10)
+    vocdata = PascalVocData(DATASET_ROOT_PATH)
+    train, test, classes = vocdata.load_data()
+    dataset = train + test
 
-    Anchor(test)
+    anchor = Anchor(dataset)
+    anchor.next_batch()
+    anchor.next_batch()
+
     import ipdb
     ipdb.set_trace()

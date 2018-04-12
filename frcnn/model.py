@@ -1,14 +1,15 @@
+from typing import Tuple
+
 from keras import Model, Input
 from keras.applications.inception_v3 import InceptionV3
 from keras.applications.resnet50 import ResNet50
 from keras.applications.vgg16 import VGG16
 from keras.applications.vgg19 import VGG19
 from keras.layers import Conv2D
-from keras.optimizers import Adam
-from tensorflow import Tensor
 
 
 class FasterRCNN(object):
+
     def __init__(self, basenet: str = 'vgg16', n_anchor: int = 9, input_shape: tuple = (None, None, 3),
                  rpn_depth: int = 512):
         """
@@ -100,20 +101,6 @@ class FasterRCNN(object):
         self.rpn_model = Model(self.input_img, outputs=[self.rpn_cls, self.rpn_reg])
         # self.rpn_model.compile(Adam(lr=1e-5), loss=[])
 
-    def get_output_size(self, width, height):
-        if self.base_name == 'vgg16':
-            return width // 16, height // 16, 512
-        elif self.base_name == 'vgg19':
-            return width // 16, height // 16, 512
-        elif self.base_name == 'resnet50':
-            return int(width // 31.19), int(height // 31.19), 2048
-        elif self.base_name == 'inception_v3':
-            return int(width // 33.35), int(height // 33.35), 2048
-        else:
-            return 0, 0
-            _msg = 'output calculataion method for {0} model is not implemented'.format(self.base_name)
-            raise NotImplementedError(_msg)
-
     @staticmethod
     def rpn_cls_loss(y_true, y_pred, rpn_lambda: int = 10):
 
@@ -126,3 +113,15 @@ class FasterRCNN(object):
     @staticmethod
     def rpn_reg_loss():
         pass
+
+
+def singleton_frcnn(*args, **kwargs) -> FasterRCNN:
+    """
+    You are advised to use this method in production environment.
+    :return an instance of FasterRCNN class.
+    """
+    if hasattr(singleton_frcnn, 'singleton') and singleton_frcnn.singleton is not None:
+        return singleton_frcnn.singleton
+
+    singleton_frcnn.singleton = FasterRCNN(*args, **kwargs)
+    return singleton_frcnn.singleton

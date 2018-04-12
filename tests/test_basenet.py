@@ -2,13 +2,12 @@ import numpy as np
 from keras import Model
 from keras import backend as K
 
-from frcnn.net import FasterRCNN
+from frcnn.model import FasterRCNN
 
 
 def test_faster_rcnn_model():
     def _test_faster_rcnn_model(base_model, width: int, height: int):
         frcnn = FasterRCNN(base_model, rpn_depth=512)
-
         assert isinstance(frcnn.base_model, Model)
 
         # Check Output Shape
@@ -23,9 +22,9 @@ def test_faster_rcnn_model():
 
     _width = np.random.randint(200, 5000)
     _height = np.random.randint(200, 5000)
-
     _test_faster_rcnn_model('vgg16', _width, _height)
     _test_faster_rcnn_model('vgg19', _width, _height)
+
     # TODO: Add resnet50 and inception_v3
     # _test_faster_rcnn_model('resnet50', _width, _height)
     # _test_faster_rcnn_model('inception_v3', _width, _height)

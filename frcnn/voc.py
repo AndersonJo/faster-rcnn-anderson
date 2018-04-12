@@ -51,9 +51,10 @@ class PascalVocData(BaseData):
         self.voc_root_path = voc_root_path
         self.voc_names = voc_names
 
-    def load_data(self, limit_size: int = None) -> Tuple[list, list, dict]:
+    def load_data(self, limit_size: int = None, need_test: bool = True) -> Tuple[list, list, dict]:
         """
         :param limit_size: limit the size of dataset. only use it for debug.
+        :param need_test: if True it returns a list of test dataset. if not it returns an empty list.
         Initialization method
         """
         # VOC data absolute paths
@@ -89,7 +90,7 @@ class PascalVocData(BaseData):
             for annot_path in _annotation_paths:
                 annot = self.parse_annotation(annot_path)
 
-                if annot['filename'] in _test_file_names:
+                if need_test and annot['filename'] in _test_file_names:
                     test.append(annot)
                 else:
                     train.append(annot)
@@ -120,7 +121,7 @@ class PascalVocData(BaseData):
         annot['filename'] = el.find('filename').text
         annot['width'] = int(el.find('size').find('width').text)
         annot['height'] = int(el.find('size').find('height').text)
-        annot['image'] = os.path.join(_img_dir_path, annot['filename'])  # absolute image path
+        annot['image_path'] = os.path.join(_img_dir_path, annot['filename'])  # absolute image path
 
         annot['objects'] = list()
         object_els = el.findall('object')
@@ -148,7 +149,6 @@ class PascalVocData(BaseData):
         :param file: output file name; where to save the image file?
         :return:
         """
-
         img = cv2.imread(annot['image'])
         for bbox in annot['objects']:
             cv2.rectangle(img, (bbox['xmin'], bbox['ymin']), (bbox['xmax'], bbox['ymax']), (0, 0, 255))

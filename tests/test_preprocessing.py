@@ -1,12 +1,15 @@
 import cv2
 import os
 
-from frcnn.preprocessing import cal_rescaled_size, rescale_image
+from frcnn.tools import cal_rescaled_size, rescale_image
 from frcnn.voc import PascalVocData
 from tests import DATASET_ROOT_PATH
 
 
 def test_image_rescale():
+    """
+    * test rescaled image size
+    """
     # Test Rescaled Size
     assert (600, 800) == cal_rescaled_size(300, 400, min_side=600)
     assert (600, 840) == cal_rescaled_size(50, 70, min_side=600)
@@ -24,9 +27,9 @@ def test_image_rescale():
     assert len(dataset) > 0
     for voc in dataset:
         # Check if the image exists
-        assert os.path.exists(voc['image'])
+        assert os.path.exists(voc['image_path'])
 
-        _img = cv2.imread(voc['image'])
+        _img = cv2.imread(voc['image_path'])
         height, width, _ = _img.shape
         resized_width, resized_height = cal_rescaled_size(voc['width'], voc['height'], min_side=1000)
         resized_img = rescale_image(_img, resized_width, resized_height)
