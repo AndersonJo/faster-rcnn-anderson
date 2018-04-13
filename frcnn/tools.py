@@ -1,14 +1,8 @@
-from typing import Tuple
+from typing import Tuple, List
 
 import cv2
 import numpy as np
 
-
-###############################################################################################
-#
-# Preprocessing Tools
-#
-###############################################################################################
 
 def cal_rescaled_size(width: int, height: int, min_side: int = 600) -> Tuple[int, int]:
     """
@@ -56,3 +50,26 @@ def cal_fen_output_size(base_name: str, width: int, height: int) -> Tuple[int, i
     else:
         _msg = 'output calculataion method for {0} model is not implemented'.format(base_name)
         raise NotImplementedError(_msg)
+
+
+#######################################################################################################
+# Intersection Over Union
+#######################################################################################################
+def cal_iou(box1: List[int, int, int, int], box2: List[int, int, int, int]) -> float:
+    """
+    Calculate Intersection Over Union between two bounding boxes.
+    :param box1: a list of coordinates of box1 [x1, x2, y1, y2]
+    :param box2: a list of coordinates of box2 [x1, x2, y1, y2]
+    :return: IoU value
+    """
+    intersection(box1, box2)
+
+
+def intersection(box1: List[int, int, int, int], b: List[int, int, int, int]):
+    x = max(ai[0], bi[0])
+    y = max(ai[1], bi[1])
+    w = min(ai[2], bi[2]) - x
+    h = min(ai[3], bi[3]) - y
+    if w < 0 or h < 0:
+        return 0
+    return w * h

@@ -4,11 +4,22 @@ import math
 
 
 class Config:
-    # Thread
-    n_thread = 1
+    ###################################
+    # Dataset
+    ###################################
+    data_path = '/data/VOCdevkit'
 
+    ###################################
+    # BaseNetwork
+    ###################################
     # Base Network Name
     net_name = 'vgg16'
+
+    ###################################
+    # Region Proposal Network & Anchor
+    ###################################
+    # Thread
+    n_thread = 1
 
     # anchor box scales
     anchor_scales = [128, 256, 512]
@@ -17,6 +28,9 @@ class Config:
     anchor_ratios = [[1, 1],
                      [1. / math.sqrt(2), 2. / math.sqrt(2)],
                      [2. / math.sqrt(2), 1. / math.sqrt(2)]]
+
+    # rescale input image
+    is_rescale = True
 
     @property
     def n_anchor(self) -> int:
@@ -29,6 +43,11 @@ def singleton_config(parser: argparse.Namespace = None) -> Config:
 
     config = Config()
     if parser is not None:
+        # Data
+        config.data_path = parser.data_path
         config.fen_name = parser.net
+        config.n_thread = parser.thread
+        config.is_rescale = parser.rescale
+
     singleton_config.singleton = config
     return singleton_config.singleton
