@@ -58,18 +58,33 @@ def cal_fen_output_size(base_name: str, width: int, height: int) -> Tuple[int, i
 def cal_iou(box1: List[int, int, int, int], box2: List[int, int, int, int]) -> float:
     """
     Calculate Intersection Over Union between two bounding boxes.
-    :param box1: a list of coordinates of box1 [x1, x2, y1, y2]
-    :param box2: a list of coordinates of box2 [x1, x2, y1, y2]
+     * (x1, y1) : the top left point of the bounding box
+     * (x2, y2) : the bottom right point of the bounding box
+    :param box1: a list of coordinates of box1 [x1, y1, x2, y2]
+    :param box2: a list of coordinates of box2 [x1, y1, x2, y2]
     :return: IoU value
     """
-    intersection(box1, box2)
+    intxn_area = intersection(box1, box2)
+    union_area = union(box1, box2, intxn_area)
+    return float(intxn_area) / float(union_area + 1e-6)
 
 
-def intersection(box1: List[int, int, int, int], b: List[int, int, int, int]):
-    x = max(ai[0], bi[0])
-    y = max(ai[1], bi[1])
-    w = min(ai[2], bi[2]) - x
-    h = min(ai[3], bi[3]) - y
+def intersection(box1: List[int, int, int, int], box2: List[int, int, int, int]):
+    x = max(box1[0], box2[0])
+    y = max(box1[1], box2[1])
+    w = min(box1[2], box2[2]) - x
+    h = min(box1[3], box2[3]) - y
     if w < 0 or h < 0:
         return 0
     return w * h
+
+
+def union(box1: List[int, int, int, int], box2: List[int, int, int, int], area_intersection: float = None):
+    area_a = (box1[2] - box1[0]) * (box1[3] - box1[1])
+    area_b = (box2[2] - box2[0]) * (box2[3] - box2[1])
+
+    if area_intersection is None:
+        area_intersection = intersection(box1, box2)
+
+    area_union = area_a + area_b - area_intersection
+    return area_union

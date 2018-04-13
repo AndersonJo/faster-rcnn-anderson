@@ -130,11 +130,11 @@ class PascalVocData(BaseData):
 
             bbox = el_object.find('bndbox')
             x1 = int(float(bbox.find('xmin').text))
-            x2 = int(float(bbox.find('xmax').text))
             y1 = int(float(bbox.find('ymin').text))
+            x2 = int(float(bbox.find('xmax').text))
             y2 = int(float(bbox.find('ymax').text))
 
-            _object = [class_name, x1, x2, y1, y2]
+            _object = [class_name, x1, y1, x2, y2]
             annot['objects'].append(_object)
 
         return annot
