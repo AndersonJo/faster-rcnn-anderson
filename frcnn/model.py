@@ -79,7 +79,6 @@ class FasterRCNN(object):
         :param rpn_depth:
         :return:
         """
-
         # intermediate layer assures that specific depth like 256, 512 is
         intermediate_layer = Conv2D(rpn_depth, kernel_size=(3, 3), strides=(1, 1), padding='same',
                                     activation='relu', kernel_initializer='glorot_uniform',

@@ -1,7 +1,7 @@
 import cv2
 import os
 
-from frcnn.tools import cal_rescaled_size, rescale_image
+from frcnn.tools import cal_rescaled_size, rescale_image, intersection, union, cal_iou, to_rescaled_coordinate
 from frcnn.voc import PascalVocData
 from tests import DATASET_ROOT_PATH
 
@@ -38,3 +38,19 @@ def test_image_rescale():
         assert voc['width'] == width
         assert voc['height'] == height
         assert (resized_height, resized_width, 3) == resized_img.shape
+
+
+def test_converting_object_information_to_rescale_size():
+    box1 = [2, 4, 6, 12]
+    box2 = [3, 7, 7, 15]
+    assert [250.0, 350.0, 750.0, 1050.0] == to_rescaled_coordinate(box1, 500, 700)
+    assert [6.0, 28.0, 14.0, 60.0] == to_rescaled_coordinate(box2, 8, 32)
+
+
+def test_intersection_over_union():
+    box1 = [2, 4, 6, 12]
+    box2 = [3, 7, 7, 15]
+
+    assert 15 == intersection(box1, box2)
+    assert 49 == union(box1, box2)
+    assert 0.3061224427321951 == cal_iou(box1, box2)

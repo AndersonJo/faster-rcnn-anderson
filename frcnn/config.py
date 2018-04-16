@@ -29,6 +29,9 @@ class Config:
                      [1. / math.sqrt(2), 2. / math.sqrt(2)],
                      [2. / math.sqrt(2), 1. / math.sqrt(2)]]
 
+    # anchor stride of x and y
+    anchor_stride = [16, 16]
+
     # rescale input image
     is_rescale = True
 

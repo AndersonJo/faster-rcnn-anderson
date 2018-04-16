@@ -27,6 +27,7 @@ def load_dataset(config: Config):
 
     anchor = Anchor(train)
     anchors = anchor.next_batch()
+    anchors = anchor.next_batch()
 
 
 def train(config: Config):
