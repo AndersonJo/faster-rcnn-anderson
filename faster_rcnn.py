@@ -28,8 +28,6 @@ def load_dataset(config: Config):
     anchor = AnchorGenerator(train)
     anchors = anchor.next_batch()
     print('anchors:', len(anchors))
-    anchors = anchor.next_batch()
-    print('anchors:', len(anchors))
 
 
 def train(config: Config):

@@ -37,7 +37,7 @@ class Config:
 
     # overlaps for RPN
     overlap_min = 0.3
-    overlap_max = 0.6
+    overlap_max = 0.7
 
     @property
     def n_anchor(self) -> int:

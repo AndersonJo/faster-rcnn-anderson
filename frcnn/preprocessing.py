@@ -18,6 +18,10 @@ producer_queue = Queue()
 
 
 class AnchorThread(Thread):
+    # Anchor Type for Regression of Region Proposal Network
+    ANCHOR_NEGATIVE = 0
+    ANCHOR_NEUTRAL = 1
+    ANCHOR_POSITIVE = 2
 
     def __init__(self, receiver: Queue, sender: Queue, anchor_scales: List[int], anchor_ratios: List[float],
                  anchor_stride: List[int] = (16, 16), net_name: str = 'vgg16', rescale: bool = True,
@@ -35,7 +39,11 @@ class AnchorThread(Thread):
 
     def run(self):
         while True:
-            datum = self.receiver.get(timeout=10)
+            try:
+                datum = self.receiver.get(timeout=10)
+            except queue.Empty:
+                break
+
             self.preprocess(datum)
 
             self.receiver.task_done()
@@ -71,6 +79,8 @@ class AnchorThread(Thread):
         rescaled_width = datum['rescaled_width']
         rescaled_height = datum['rescaled_height']
         n_object = len(datum['objects'])
+        n_ratio = len(self.anchor_ratios)
+        n_anchor = len(self.anchor_ratios) * len(self.anchor_scales)
 
         # Calculate output size of Base Network (feature extraction model)
         output_width, output_height, _ = cal_fen_output_size(self._net_name, rescaled_width, rescaled_height)
@@ -80,9 +90,14 @@ class AnchorThread(Thread):
         best_anchor_for_box = -1 * np.ones((n_object, 4), dtype='int')
         best_reg_for_box = np.zeros((n_object, 4), dtype='float32')
 
-        _comb = [range(len(self.anchor_scales)), range(len(self.anchor_ratios)),
-                 range(output_width), range(output_height), range(n_object)]
-        for anc_scale_idx, anc_rat_idx, x_pos, y_pos, idx_obj in itertools.product(*_comb):
+        # Classifier Target Data
+        y_cls_target = np.zeros((output_height, output_width, n_anchor))
+        y_valid_box = np.zeros((output_height, output_width, n_anchor))
+        y_regr_targets = np.zeros((output_height, output_width, n_anchor * 4))
+
+        _comb = [range(output_height), range(output_width),
+                 range(len(self.anchor_scales)), range(len(self.anchor_ratios)), range(n_object)]
+        for y_pos, x_pos, anc_scale_idx, anc_rat_idx, idx_obj in itertools.product(*_comb):
             anc_scale = self.anchor_scales[anc_scale_idx]
             anc_rat = self.anchor_ratios[anc_rat_idx]
 
@@ -90,6 +105,7 @@ class AnchorThread(Thread):
             obj_info = datum['objects'][idx_obj]
             gta_coord = self.cal_gta_coordinate(obj_info[1:], width, height, rescaled_width, rescaled_height)
 
+            cv2.rectangle(image, (gta_coord[0], gta_coord[1]), (gta_coord[2], gta_coord[3]), (255, 255, 0))
             # anchor box coordinates on the rescaled image
             anchor_coord = self.cal_anchor_cooridinate(x_pos, y_pos, anc_scale, anc_rat, self.anchor_stride)
 
@@ -98,31 +114,54 @@ class AnchorThread(Thread):
             if not _valid_anchor:
                 continue
 
+            ##############################################
+            # Regression Target
+            ##############################################
+
             # Calculate Intersection Over Union
             iou = cal_iou(gta_coord, anchor_coord)
 
-            # Create Regression Target
+            # Calculate regression target
             if iou > best_iou_for_box[idx_obj] or iou > self.overlap_max:
                 reg_target = create_rpn_regression_target(gta_coord, anchor_coord)
-                print(reg_target)
 
+            # Ground-truth bounding box should be mapped to at least one anchor box.
+            # So tracking the best anchor should be implemented
             if iou > best_iou_for_box[idx_obj]:
                 best_iou_for_box[idx_obj] = iou
-                best_anchor_for_box[idx_obj] = (x_pos, y_pos, anc_scale_idx, anc_rat_idx)
+                best_anchor_for_box[idx_obj] = (y_pos, x_pos, anc_scale_idx, anc_rat_idx)
                 best_reg_for_box[idx_obj] = reg_target
-                # print('best_iou_for_box:', best_iou_for_box)
-                # print('best_anchor_for_box:', best_anchor_for_box)
 
-                # print(iou)
-                # cv2.rectangle(image, (anchor_coord[0], anchor_coord[1]), (anchor_coord[2], anchor_coord[3]),
-                #               (0, 0, 255))
+            # Anchor is positive (the anchor refers to an ground-truth object) if iou > 0.5~0.7
+            # is_valid_anchor: this flag prevents overwriting existing valid anchor (due to the for-loop of objects)
+            #                  if the anchor meets overlap_max or overlap_min, it should not be changed.
+            z_pos = anc_scale_idx + n_ratio * anc_rat_idx
+            is_valid_anchor = bool(y_valid_box[y_pos, x_pos, z_pos])
 
-        # print(datum)
-        # print(gta_coord[0:2], gta_coord[2:])
-        # cv2.rectangle(image, tuple(gta_coord[0:2]), tuple(gta_coord[2:]), (0, 0, 255))
+            if iou > self.overlap_max:
+                y_valid_box[y_pos, x_pos, z_pos] = 1
+                y_cls_target[y_pos, x_pos, z_pos] = 1
+                y_regr_targets[y_pos, x_pos, z_pos: z_pos + 4] = reg_target
+                # self.point(image, x_pos, y_pos, (255, 255, 0))
+
+            elif iou < self.overlap_min and not is_valid_anchor:
+                y_valid_box[y_pos, x_pos, z_pos] = 1
+                y_cls_target[y_pos, x_pos, z_pos] = 0
+                # self.point(image, x_pos, y_pos)
+            if not is_valid_anchor:
+                y_valid_box[y_pos, x_pos, z_pos] = 0
+                y_cls_target[y_pos, x_pos, z_pos] = 0
+
+        for i in range(best_anchor_for_box.shape[0]):
+            y_pos = best_anchor_for_box[i][0]
+            x_pos = best_anchor_for_box[i][1]
+            anc_scale = self.anchor_scales[best_anchor_for_box[i][2]]
+            anc_rat = self.anchor_ratios[best_anchor_for_box[i][3]]
+            self.rectangle(image, x_pos, y_pos, anc_scale, anc_rat)
+
 
         cv2.imwrite('temp/{0}.png'.format(datum['filename']), image)
-        self.sender.put('done')
+        # self.sender.put('done')
 
     @staticmethod
     def cal_gta_coordinate(box: List[int], width: int, height: int,
@@ -183,6 +222,17 @@ class AnchorThread(Thread):
         if anchor_coord[1] < 0 or anchor_coord[3] > rescaled_height:
             return False
         return True
+
+    @staticmethod
+    def rectangle(image, x_pos: int, y_pos: int, anc_scale: int, anc_rat: List[float]):
+        w, h = anc_scale * anc_rat[0], anc_scale * anc_rat[1]
+        cv2.rectangle(image, (int(x_pos * 16 - w / 2), int(y_pos * 16 - h / 2)),
+                      (int(x_pos * 16 + w / 2), int(y_pos * 16 + h / 2)),
+                      (0, 0, 255))
+
+    @staticmethod
+    def point(image, x_pos: int, y_pos: int, color=(0, 0, 255)):
+        cv2.rectangle(image, (x_pos * 16, y_pos * 16), (x_pos * 16 + 5, y_pos * 16 + 5), color)
 
 
 class AnchorGenerator(object):
@@ -281,3 +331,4 @@ def singleton_anchor_thread_manager() -> AnchorThreadManager:
     config = singleton_config()
     singleton_anchor_thread_manager.singleton = AnchorThreadManager(config.n_thread)
     return singleton_anchor_thread_manager.singleton
+

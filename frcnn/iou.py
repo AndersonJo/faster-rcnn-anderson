@@ -3,7 +3,7 @@ from typing import List
 
 def cal_iou(box1: List[int], box2: List[int]) -> float:
     """
-    Calculates Intersection Over Union between two bounding boxes.
+    Calculate Intersection Over Union between two bounding boxes.
      * (x1, y1) : the top left point of the bounding box
      * (x2, y2) : the bottom right point of the bounding box
     :param box1: a list of coordinates [x_min, y_min, x_max, y_max]
@@ -17,7 +17,7 @@ def cal_iou(box1: List[int], box2: List[int]) -> float:
 
 def intersection(box1: List[int], box2: List[int]):
     """
-    Calculates intersection between the box coordinates.
+    Calculate intersection between the box coordinates.
     :param box1: a list of coordinates [x_min, y_min, x_max, y_max]
     :param box2: a list of coordinates [x_min, y_min, x_max, y_max]
     :return: intersection value
@@ -33,7 +33,7 @@ def intersection(box1: List[int], box2: List[int]):
 
 def union(box1: List[int], box2: List[int], area_intersection: float = None):
     """
-    Calculates union between the box coordinates.
+    Calculate union between the box coordinates.
     :param box1: a list of coordinates [x_min, y_min, x_max, y_max]
     :param box2: a list of coordinates [x_min, y_min, x_max, y_max]
     :param area_intersection: if provided it reduces computation.
