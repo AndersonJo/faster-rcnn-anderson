@@ -8,41 +8,39 @@ from typing import List
 import cv2
 import numpy as np
 
-from frcnn.config import singleton_config, Config
-from frcnn.tools import cal_rescaled_size, rescale_image, cal_fen_output_size, cal_iou
+from frcnn.config import singleton_config
+from frcnn.iou import cal_iou
+from frcnn.rpn import create_rpn_regression_target
+from frcnn.tools import cal_rescaled_size, rescale_image, cal_fen_output_size
 
 worker_queue = Queue()
 producer_queue = Queue()
 
 
-class AnchorThreadManager(object):
-    def __init__(self, n_thread: int = 12):
-        self.n_thread = n_thread
-        self.threads = list()
-
-    def create_anchor_threads(self, start: bool = True) -> None:
-        config = singleton_config()
-        for i in range(self.n_thread):
-            t = AnchorThread(config, worker_queue)
-            t.setDaemon(True)
-            self.threads.append(t)
-            if start:
-                t.start()
-
-
 class AnchorThread(Thread):
-    def __init__(self, config: Config, receiver: Queue):
+
+    def __init__(self, receiver: Queue, sender: Queue, anchor_scales: List[int], anchor_ratios: List[float],
+                 anchor_stride: List[int] = (16, 16), net_name: str = 'vgg16', rescale: bool = True,
+                 overlap_min: float = 0.3, overlap_max: float = 0.6):
         super(AnchorThread, self).__init__()
         self.receiver = receiver
-        self._config = config
-        self._rescale = config.is_rescale
+        self.sender = sender
+        self._rescale = rescale
+        self._net_name = net_name
+        self.anchor_scales = anchor_scales
+        self.anchor_ratios = anchor_ratios
+        self.anchor_stride = anchor_stride
+        self.overlap_min = overlap_min
+        self.overlap_max = overlap_max
 
     def run(self):
         while True:
-            datum = self.receiver.get()
+            datum = self.receiver.get(timeout=10)
             self.preprocess(datum)
 
             self.receiver.task_done()
+            if self.receiver.empty():
+                break
 
     def preprocess(self, datum: dict) -> dict:
         """
@@ -73,21 +71,27 @@ class AnchorThread(Thread):
         rescaled_width = datum['rescaled_width']
         rescaled_height = datum['rescaled_height']
         n_object = len(datum['objects'])
-        anchor_stride = self._config.anchor_stride
 
         # Calculate output size of Base Network (feature extraction model)
-        output_width, output_height, _ = cal_fen_output_size(self._config.net_name, rescaled_width, rescaled_height)
+        output_width, output_height, _ = cal_fen_output_size(self._net_name, rescaled_width, rescaled_height)
 
-        # Response variables
-        _comb = [range(n_object), self._config.anchor_scales, self._config.anchor_ratios,
-                 range(output_width), range(output_height)]
-        for idx_obj, anc_scale, anc_rat, x_pos, y_pos in itertools.product(*_comb):
+        # Tracking best things
+        best_iou_for_box = np.zeros(n_object)
+        best_anchor_for_box = -1 * np.ones((n_object, 4), dtype='int')
+        best_reg_for_box = np.zeros((n_object, 4), dtype='float32')
+
+        _comb = [range(len(self.anchor_scales)), range(len(self.anchor_ratios)),
+                 range(output_width), range(output_height), range(n_object)]
+        for anc_scale_idx, anc_rat_idx, x_pos, y_pos, idx_obj in itertools.product(*_comb):
+            anc_scale = self.anchor_scales[anc_scale_idx]
+            anc_rat = self.anchor_ratios[anc_rat_idx]
+
             # ground-truth box coordinates on the rescaled image
             obj_info = datum['objects'][idx_obj]
             gta_coord = self.cal_gta_coordinate(obj_info[1:], width, height, rescaled_width, rescaled_height)
 
             # anchor box coordinates on the rescaled image
-            anchor_coord = self.cal_anchor_cooridinate(x_pos, y_pos, anc_scale, anc_rat, anchor_stride)
+            anchor_coord = self.cal_anchor_cooridinate(x_pos, y_pos, anc_scale, anc_rat, self.anchor_stride)
 
             # Check if the anchor is within the rescaled image
             _valid_anchor = self.is_anchor_valid(anchor_coord, rescaled_width, rescaled_height)
@@ -96,14 +100,29 @@ class AnchorThread(Thread):
 
             # Calculate Intersection Over Union
             iou = cal_iou(gta_coord, anchor_coord)
-            if iou > 0.5:
-                print(iou)
 
-            # print(datum)
-            # print(gta_coord[0:2], gta_coord[2:])
-            # cv2.rectangle(image, tuple(gta_coord[0:2]), tuple(gta_coord[2:]), (0, 0, 255))
-            cv2.rectangle(image, (anchor_coord[0], anchor_coord[1]), (anchor_coord[2], anchor_coord[3]), (0, 0, 255))
+            # Create Regression Target
+            if iou > best_iou_for_box[idx_obj] or iou > self.overlap_max:
+                reg_target = create_rpn_regression_target(gta_coord, anchor_coord)
+                print(reg_target)
+
+            if iou > best_iou_for_box[idx_obj]:
+                best_iou_for_box[idx_obj] = iou
+                best_anchor_for_box[idx_obj] = (x_pos, y_pos, anc_scale_idx, anc_rat_idx)
+                best_reg_for_box[idx_obj] = reg_target
+                # print('best_iou_for_box:', best_iou_for_box)
+                # print('best_anchor_for_box:', best_anchor_for_box)
+
+                # print(iou)
+                # cv2.rectangle(image, (anchor_coord[0], anchor_coord[1]), (anchor_coord[2], anchor_coord[3]),
+                #               (0, 0, 255))
+
+        # print(datum)
+        # print(gta_coord[0:2], gta_coord[2:])
+        # cv2.rectangle(image, tuple(gta_coord[0:2]), tuple(gta_coord[2:]), (0, 0, 255))
+
         cv2.imwrite('temp/{0}.png'.format(datum['filename']), image)
+        self.sender.put('done')
 
     @staticmethod
     def cal_gta_coordinate(box: List[int], width: int, height: int,
@@ -166,9 +185,9 @@ class AnchorThread(Thread):
         return True
 
 
-class Anchor(object):
+class AnchorGenerator(object):
     def __init__(self, dataset: list, batch: int = 32, augment: bool = False):
-        super(Anchor, self).__init__()
+        super(AnchorGenerator, self).__init__()
         self._dataset = dataset
         self.batch = batch
 
@@ -188,7 +207,7 @@ class Anchor(object):
 
         # Initial Batch Queue
         self.batch_jobs = deque()
-        self.batch_jobs.append(self._put_batch_to_queue())
+        # self.batch_jobs.append(self._put_batch_to_queue())
 
     def _put_batch_to_queue(self) -> int:
         if self._cur_idx >= self.n_data:
@@ -218,9 +237,41 @@ class Anchor(object):
             print('에러', e)
             pass
 
-        # print(batch)
-        # print()
+        thread_mgr = singleton_anchor_thread_manager()
+        thread_mgr.restart()
+
         return batch
+
+
+class AnchorThreadManager(object):
+    def __init__(self, n_thread: int = 12):
+        self.n_thread = n_thread
+        self.threads = list()
+
+    def initialize(self, start: bool = True) -> None:
+        for i in range(self.n_thread):
+            t = self._create_anchor_thread(start)
+            self.threads.append(t)
+
+    def _create_anchor_thread(self, start: bool = True) -> AnchorThread:
+        config = singleton_config()
+        t = AnchorThread(worker_queue, producer_queue, config.anchor_scales, config.anchor_ratios, config.anchor_stride,
+                         config.net_name, config.is_rescale, config.overlap_max, config.overlap_min)
+        t.setDaemon(True)
+
+        if start:
+            t.start()
+        return t
+
+    def restart(self):
+        for i, t in enumerate(self.threads):
+            if not t.isAlive():
+                t = self._create_anchor_thread(True)
+                self.threads[i] = t
+
+    def wait(self):
+        for t in self.threads:
+            t.join()
 
 
 def singleton_anchor_thread_manager() -> AnchorThreadManager:

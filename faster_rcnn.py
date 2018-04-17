@@ -1,7 +1,7 @@
 from argparse import ArgumentParser
 
 # Parse arguments
-from frcnn.preprocessing import Anchor, AnchorThreadManager, singleton_anchor_thread_manager
+from frcnn.preprocessing import AnchorGenerator, AnchorThreadManager, singleton_anchor_thread_manager
 from frcnn.config import singleton_config, Config
 from frcnn.voc import PascalVocData
 
@@ -25,16 +25,20 @@ def load_dataset(config: Config):
     vocdata = PascalVocData(config.data_path)
     train, test, classes = vocdata.load_data(limit_size=30)
 
-    anchor = Anchor(train)
+    anchor = AnchorGenerator(train)
     anchors = anchor.next_batch()
+    print('anchors:', len(anchors))
     anchors = anchor.next_batch()
+    print('anchors:', len(anchors))
 
 
 def train(config: Config):
     anchor_thread_mgr = singleton_anchor_thread_manager()
-    anchor_thread_mgr.create_anchor_threads()
+    anchor_thread_mgr.initialize()
 
     load_dataset(config)
+
+    anchor_thread_mgr.wait()
 
 
 if __name__ == '__main__':

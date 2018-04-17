@@ -35,6 +35,10 @@ class Config:
     # rescale input image
     is_rescale = True
 
+    # overlaps for RPN
+    overlap_min = 0.3
+    overlap_max = 0.6
+
     @property
     def n_anchor(self) -> int:
         return len(self.anchor_ratios) * len(self.anchor_scales)
