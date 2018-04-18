@@ -89,6 +89,7 @@ class AnchorThread(Thread):
         best_iou_for_box = np.zeros(n_object)
         best_anchor_for_box = -1 * np.ones((n_object, 4), dtype='int')
         best_reg_for_box = np.zeros((n_object, 4), dtype='float32')
+        n_pos_anchor_for_box = np.zeros(n_object)
 
         # Classifier Target Data
         y_cls_target = np.zeros((output_height, output_width, n_anchor))
@@ -139,6 +140,7 @@ class AnchorThread(Thread):
             is_valid_anchor = bool(y_valid_box[y_pos, x_pos, z_pos])
 
             if iou > self.overlap_max:
+                n_pos_anchor_for_box[idx_obj] += 1
                 y_valid_box[y_pos, x_pos, z_pos] = 1
                 y_cls_target[y_pos, x_pos, z_pos] = 1
                 y_regr_targets[y_pos, x_pos, z_pos: z_pos + 4] = reg_target
@@ -152,13 +154,17 @@ class AnchorThread(Thread):
                 y_valid_box[y_pos, x_pos, z_pos] = 0
                 y_cls_target[y_pos, x_pos, z_pos] = 0
 
-        for i in range(best_anchor_for_box.shape[0]):
-            y_pos = best_anchor_for_box[i][0]
-            x_pos = best_anchor_for_box[i][1]
-            anc_scale = self.anchor_scales[best_anchor_for_box[i][2]]
-            anc_rat = self.anchor_ratios[best_anchor_for_box[i][3]]
-            self.rectangle(image, x_pos, y_pos, anc_scale, anc_rat)
+        y_valid_box = np.transpose(y_valid_box, (2, 0, 1))
+        y_cls_target = np.transpose(y_cls_target, (2, 0, 1))
 
+        # Ensure that at least a ground-truth bounding box is mapped to
+
+        # for i in range(best_anchor_for_box.shape[0]):
+        #     y_pos = best_anchor_for_box[i][0]
+        #     x_pos = best_anchor_for_box[i][1]
+        #     anc_scale = self.anchor_scales[best_anchor_for_box[i][2]]
+        #     anc_rat = self.anchor_ratios[best_anchor_for_box[i][3]]
+        #     self.rectangle(image, x_pos, y_pos, anc_scale, anc_rat)
 
         cv2.imwrite('temp/{0}.png'.format(datum['filename']), image)
         # self.sender.put('done')
@@ -331,4 +337,3 @@ def singleton_anchor_thread_manager() -> AnchorThreadManager:
     config = singleton_config()
     singleton_anchor_thread_manager.singleton = AnchorThreadManager(config.n_thread)
     return singleton_anchor_thread_manager.singleton
-

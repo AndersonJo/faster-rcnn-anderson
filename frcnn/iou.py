@@ -12,7 +12,7 @@ def cal_iou(box1: List[int], box2: List[int]) -> float:
     """
     intxn_area = intersection(box1, box2)
     union_area = union(box1, box2, intxn_area)
-    return float(intxn_area) / float(union_area + 1e-6)
+    return round(float(intxn_area) / float(union_area + 1e-18), 8)
 
 
 def intersection(box1: List[int], box2: List[int]):
