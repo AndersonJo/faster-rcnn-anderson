@@ -58,14 +58,14 @@ class AnchorThread(Thread):
             except queue.Empty:
                 break
 
-            rpn_target, regr_target = self.preprocess(datum)
-            self.sender.put((rpn_target, regr_target))
-            print('THREAD JOB DONE')
+            rpn_target, regr_target, image = self.preprocess(datum)
+            self.sender.put((image, rpn_target, regr_target))
+
             self.receiver.task_done()
             if self.receiver.empty():
                 break
 
-    def preprocess(self, datum: dict) -> Tuple[np.ndarray, np.ndarray]:
+    def preprocess(self, datum: dict) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         The method pre-processes just a single datum (not batch data)
         :param datum: single data point (i.e. VOC Data)
@@ -73,6 +73,7 @@ class AnchorThread(Thread):
         :return:
         """
         image = cv2.imread(datum['image_path'])
+        image = image[:, :, (2, 1, 0)]  # BGR -> RGB
         width, height, _ = image.shape
 
         # Rescale Image: at least one side of image should be larger than or equal to minimum size;
@@ -87,7 +88,7 @@ class AnchorThread(Thread):
         datum['rescaled_height'] = rescaled_height
 
         cls_target, regr_target = self.generate_rpn_target(datum, image)
-        return cls_target, regr_target
+        return cls_target, regr_target, image
 
     def generate_rpn_target(self, datum: dict, image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         width = datum['width']
@@ -201,9 +202,13 @@ class AnchorThread(Thread):
         y_valid_box = np.transpose(y_valid_box, (2, 0, 1))
         y_regr_targets = np.transpose(y_regr_targets, (2, 0, 1))
 
+        y_cls_target = np.expand_dims(y_cls_target, axis=0)
+        y_valid_box = np.expand_dims(y_valid_box, axis=0)
+        y_regr_targets = np.expand_dims(y_regr_targets, axis=0)
+
         # Final target data
-        y_rpn_cls = np.concatenate([y_valid_box, y_cls_target], axis=0)
-        y_rpn_regr = np.concatenate([np.repeat(y_cls_target, 4, axis=0), y_regr_targets], axis=1)
+        y_rpn_cls = np.concatenate([y_valid_box, y_cls_target], axis=1)
+        y_rpn_regr = np.concatenate([np.repeat(y_cls_target, 4, axis=1), y_regr_targets], axis=1)
 
         # cv2.imwrite('temp/{0}.png'.format(datum['filename']), image)
         return np.copy(y_rpn_cls), np.copy(y_rpn_regr)
@@ -318,7 +323,7 @@ class AnchorGenerator(object):
 
         return n_images
 
-    def next_batch(self) -> List[dict]:
+    def next_batch(self) -> Tuple[list, list, list]:
         """
         Get a batch of pre-processed data from worker threads
         """
@@ -326,21 +331,24 @@ class AnchorGenerator(object):
         self.prepare_async_target()
         n_images = self.task_count.pop()
 
-        batch = list()
+        batch_img = list()
+        batch_cls = list()
+        batch_regr = list()
         try:
             for i in range(n_images):
-                batch.append(producer_queue.get(timeout=10))
+                image, cls_target, regr_target = producer_queue.get(timeout=10)
+                batch_img.append(image)
+                batch_cls.append(cls_target)
+                batch_regr.append(regr_target)
                 producer_queue.task_done()
         except queue.Empty as e:
             print('에러', e)
             pass
 
-        for _ in batch:
-            print(_[0].shape, _[1].shape)
         thread_mgr = singleton_anchor_thread_manager()
         thread_mgr.restart()
 
-        return batch
+        return batch_img, batch_cls, batch_regr
 
 
 class AnchorThreadManager(object):

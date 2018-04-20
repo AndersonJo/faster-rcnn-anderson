@@ -25,9 +25,11 @@ def load_dataset(config: Config):
     vocdata = PascalVocData(config.data_path)
     train, test, classes = vocdata.load_data(limit_size=30)
 
-    anchor = AnchorGenerator(train)
-    anchors = anchor.next_batch()
-    print('anchors:', len(anchors))
+    anchor = AnchorGenerator(train, batch=2)
+    batch_img, batch_cls, batch_regr = anchor.next_batch()
+    batch_img, batch_cls, batch_regr = anchor.next_batch()
+    batch_img, batch_cls, batch_regr = anchor.next_batch()
+    print('anchors:', len(batch_img))
 
 
 def train(config: Config):
