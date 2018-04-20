@@ -1,9 +1,10 @@
 import itertools
 import queue
+import random
 from collections import deque
 from queue import Queue
 from threading import Thread
-from typing import List
+from typing import List, Tuple
 
 import cv2
 import numpy as np
@@ -25,7 +26,19 @@ class AnchorThread(Thread):
 
     def __init__(self, receiver: Queue, sender: Queue, anchor_scales: List[int], anchor_ratios: List[float],
                  anchor_stride: List[int] = (16, 16), net_name: str = 'vgg16', rescale: bool = True,
-                 overlap_min: float = 0.3, overlap_max: float = 0.6):
+                 overlap_min: float = 0.3, overlap_max: float = 0.6, max_anchor: int = 256):
+        """
+        :param receiver: Queue to receive data from producer
+        :param sender: Queue to send data from anchor thread
+        :param anchor_scales: a list of anchor scales
+        :param anchor_ratios: a list of anchor ratios
+        :param anchor_stride: stride value used for generating anchors
+        :param net_name: feature extraction model name like 'vgg-18'
+        :param rescale: for enhancing the accuracy
+        :param overlap_min: determines negative anchors if the iou value is under the overlap_min
+        :param overlap_max: determines positive anchors if the iou value is over the overlap_max
+        :param max_anchor: it limits the number of negative and positive anchors
+        """
         super(AnchorThread, self).__init__()
         self.receiver = receiver
         self.sender = sender
@@ -36,6 +49,7 @@ class AnchorThread(Thread):
         self.anchor_stride = anchor_stride
         self.overlap_min = overlap_min
         self.overlap_max = overlap_max
+        self.max_anchor = max_anchor
 
     def run(self):
         while True:
@@ -44,13 +58,14 @@ class AnchorThread(Thread):
             except queue.Empty:
                 break
 
-            self.preprocess(datum)
-
+            rpn_target, regr_target = self.preprocess(datum)
+            self.sender.put((rpn_target, regr_target))
+            print('THREAD JOB DONE')
             self.receiver.task_done()
             if self.receiver.empty():
                 break
 
-    def preprocess(self, datum: dict) -> dict:
+    def preprocess(self, datum: dict) -> Tuple[np.ndarray, np.ndarray]:
         """
         The method pre-processes just a single datum (not batch data)
         :param datum: single data point (i.e. VOC Data)
@@ -71,9 +86,10 @@ class AnchorThread(Thread):
         datum['rescaled_width'] = rescaled_width
         datum['rescaled_height'] = rescaled_height
 
-        self.generate_rpn_target(datum, image)
+        cls_target, regr_target = self.generate_rpn_target(datum, image)
+        return cls_target, regr_target
 
-    def generate_rpn_target(self, datum: dict, image: np.ndarray):
+    def generate_rpn_target(self, datum: dict, image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         width = datum['width']
         height = datum['height']
         rescaled_width = datum['rescaled_width']
@@ -115,10 +131,6 @@ class AnchorThread(Thread):
             if not _valid_anchor:
                 continue
 
-            ##############################################
-            # Regression Target
-            ##############################################
-
             # Calculate Intersection Over Union
             iou = cal_iou(gta_coord, anchor_coord)
 
@@ -137,37 +149,64 @@ class AnchorThread(Thread):
             # is_valid_anchor: this flag prevents overwriting existing valid anchor (due to the for-loop of objects)
             #                  if the anchor meets overlap_max or overlap_min, it should not be changed.
             z_pos = anc_scale_idx + n_ratio * anc_rat_idx
-            is_valid_anchor = bool(y_valid_box[y_pos, x_pos, z_pos])
+            is_valid_anchor = bool(y_valid_box[y_pos, x_pos, z_pos] == 1)
 
-            if iou > self.overlap_max:
+            if iou > self.overlap_max:  # Positive anchors
+
                 n_pos_anchor_for_box[idx_obj] += 1
                 y_valid_box[y_pos, x_pos, z_pos] = 1
                 y_cls_target[y_pos, x_pos, z_pos] = 1
                 y_regr_targets[y_pos, x_pos, z_pos: z_pos + 4] = reg_target
                 # self.point(image, x_pos, y_pos, (255, 255, 0))
 
-            elif iou < self.overlap_min and not is_valid_anchor:
+            elif iou < self.overlap_min and not is_valid_anchor:  # Negative anchors
                 y_valid_box[y_pos, x_pos, z_pos] = 1
                 y_cls_target[y_pos, x_pos, z_pos] = 0
                 # self.point(image, x_pos, y_pos)
-            if not is_valid_anchor:
+                # self.point(image, x_pos, y_pos, (200, 200, 155))
+
+            elif not is_valid_anchor:
                 y_valid_box[y_pos, x_pos, z_pos] = 0
                 y_cls_target[y_pos, x_pos, z_pos] = 0
 
-        y_valid_box = np.transpose(y_valid_box, (2, 0, 1))
+        # Ensure a ground-truth bounding box is mapped to at least one anchor
+        for i in range(n_object):
+            if n_pos_anchor_for_box[i] == 0:
+                y_pos, x_pos, anc_scale_idx, anc_rat_idx = best_anchor_for_box[i]
+                z_pos = anc_scale_idx + n_ratio * anc_rat_idx
+                reg_target = best_reg_for_box[i]
+
+                y_valid_box[y_pos, x_pos, z_pos] = 1
+                y_cls_target[y_pos, x_pos, z_pos] = 1
+                y_regr_targets[y_pos, x_pos, z_pos: z_pos + 4] = reg_target
+
+        # It is more likely to have more negative anchors than positive anchors.
+        # The ratio between negative and positive anchors should be equal.
+        pos_locs = np.where(np.logical_and(y_valid_box == 1, y_cls_target == 1))
+        neg_locs = np.where(np.logical_and(y_valid_box == 1, y_cls_target == 0))
+        n_pos = pos_locs[0].shape[0]
+        n_neg = neg_locs[0].shape[0]
+
+        if len(pos_locs[0]) > self.max_anchor / 2:
+            val_locs = random.sample(range(len(pos_locs[0])), len(pos_locs[0]) - self.max_anchor // 2)
+            y_valid_box[pos_locs[0][val_locs], pos_locs[1][val_locs], pos_locs[2][val_locs]] = 0
+            n_pos = self.max_anchor // 2
+
+        if n_neg + n_pos > self.max_anchor:
+            val_locs = random.sample(range(len(neg_locs[0])), n_neg - n_pos)
+            y_valid_box[neg_locs[0][val_locs], neg_locs[1][val_locs], neg_locs[2][val_locs]] = 0
+
+        # Transform
         y_cls_target = np.transpose(y_cls_target, (2, 0, 1))
+        y_valid_box = np.transpose(y_valid_box, (2, 0, 1))
+        y_regr_targets = np.transpose(y_regr_targets, (2, 0, 1))
 
-        # Ensure that at least a ground-truth bounding box is mapped to
+        # Final target data
+        y_rpn_cls = np.concatenate([y_valid_box, y_cls_target], axis=0)
+        y_rpn_regr = np.concatenate([np.repeat(y_cls_target, 4, axis=0), y_regr_targets], axis=1)
 
-        # for i in range(best_anchor_for_box.shape[0]):
-        #     y_pos = best_anchor_for_box[i][0]
-        #     x_pos = best_anchor_for_box[i][1]
-        #     anc_scale = self.anchor_scales[best_anchor_for_box[i][2]]
-        #     anc_rat = self.anchor_ratios[best_anchor_for_box[i][3]]
-        #     self.rectangle(image, x_pos, y_pos, anc_scale, anc_rat)
-
-        cv2.imwrite('temp/{0}.png'.format(datum['filename']), image)
-        # self.sender.put('done')
+        # cv2.imwrite('temp/{0}.png'.format(datum['filename']), image)
+        return np.copy(y_rpn_cls), np.copy(y_rpn_regr)
 
     @staticmethod
     def cal_gta_coordinate(box: List[int], width: int, height: int,
@@ -260,39 +299,44 @@ class AnchorGenerator(object):
 
         # Threads
         self.threads = list()
+        self.task_count = deque()
 
-        # Initial Batch Queue
-        self.batch_jobs = deque()
-        # self.batch_jobs.append(self._put_batch_to_queue())
-
-    def _put_batch_to_queue(self) -> int:
+    def prepare_async_target(self) -> int:
+        """
+        Put a batch of data into worker threads to pre-process data
+        :return : the number of processed data
+        """
         if self._cur_idx >= self.n_data:
             self._cur_idx = 0
 
         batch_data = self._dataset[self._cur_idx:self._cur_idx + self.batch]
-        n_batch = len([worker_queue.put(datum, timeout=5) for datum in batch_data])
+        n_images = len([worker_queue.put(datum, timeout=5) for datum in batch_data])
 
         # Increase current index
-        self._cur_idx += self.batch
+        self._cur_idx += n_images
+        self.task_count.append(n_images)
 
-        # Add batch job
-        self.batch_jobs.append(n_batch)
-        return n_batch
+        return n_images
 
     def next_batch(self) -> List[dict]:
+        """
+        Get a batch of pre-processed data from worker threads
+        """
         # Add batch to threads
-        self._put_batch_to_queue()
+        self.prepare_async_target()
+        n_images = self.task_count.pop()
 
-        # Get batch from threads
-        n_batch = self.batch_jobs.pop()
         batch = list()
         try:
-            for i in range(n_batch):
-                batch.append(producer_queue.get(timeout=5))
+            for i in range(n_images):
+                batch.append(producer_queue.get(timeout=10))
+                producer_queue.task_done()
         except queue.Empty as e:
             print('에러', e)
             pass
 
+        for _ in batch:
+            print(_[0].shape, _[1].shape)
         thread_mgr = singleton_anchor_thread_manager()
         thread_mgr.restart()
 
