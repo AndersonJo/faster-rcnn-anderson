@@ -4,7 +4,7 @@ import random
 from collections import deque
 from queue import Queue
 from threading import Thread
-from typing import List, Tuple
+from typing import List, Tuple, Generator
 
 import cv2
 import numpy as np
@@ -44,9 +44,9 @@ class AnchorThread(Thread):
         self.sender = sender
         self._rescale = rescale
         self._net_name = net_name
-        self.anchor_scales = anchor_scales
-        self.anchor_ratios = anchor_ratios
-        self.anchor_stride = anchor_stride
+        self.anchor_scales = anchor_scales.copy()
+        self.anchor_ratios = anchor_ratios.copy()
+        self.anchor_stride = anchor_stride.copy()
         self.overlap_min = overlap_min
         self.overlap_max = overlap_max
         self.max_anchor = max_anchor
@@ -56,6 +56,7 @@ class AnchorThread(Thread):
             try:
                 datum = self.receiver.get(timeout=10)
             except queue.Empty:
+                print('Empty Receiver in Anchor Thread')
                 break
 
             rpn_target, regr_target, image = self.preprocess(datum)
@@ -73,7 +74,6 @@ class AnchorThread(Thread):
         :return:
         """
         image = cv2.imread(datum['image_path'])
-        image = image[:, :, (2, 1, 0)]  # BGR -> RGB
         width, height, _ = image.shape
 
         # Rescale Image: at least one side of image should be larger than or equal to minimum size;
@@ -81,14 +81,36 @@ class AnchorThread(Thread):
         if self._rescale:
             rescaled_width, rescaled_height = cal_rescaled_size(width, height)
             image = rescale_image(image, rescaled_width, rescaled_height)
+
         else:
             rescaled_width, rescaled_height = width, height
 
         datum['rescaled_width'] = rescaled_width
         datum['rescaled_height'] = rescaled_height
-
         cls_target, regr_target = self.generate_rpn_target(datum, image)
+
+        # Post Processing the Image
+        image = self.postprocess_image(image)
         return cls_target, regr_target, image
+
+    def postprocess_image(self, image: np.ndarray) -> np.ndarray:
+        """
+        Post-process the rescaled image
+        :param image:
+        :return: post-processed image
+        """
+        # Change color type
+        image = image[:, :, (2, 1, 0)]  # BGR -> RGB
+
+        # Transpose the image -> (channel, height, widht)
+        # image = np.transpose(image, (2, 0, 1))
+
+        # Normalize the image
+        image = image / 255.
+
+        # Expand the dimension
+        image = np.expand_dims(image, axis=0)
+        return image
 
     def generate_rpn_target(self, datum: dict, image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         width = datum['width']
@@ -115,6 +137,7 @@ class AnchorThread(Thread):
 
         _comb = [range(output_height), range(output_width),
                  range(len(self.anchor_scales)), range(len(self.anchor_ratios)), range(n_object)]
+
         for y_pos, x_pos, anc_scale_idx, anc_rat_idx, idx_obj in itertools.product(*_comb):
             anc_scale = self.anchor_scales[anc_scale_idx]
             anc_rat = self.anchor_ratios[anc_rat_idx]
@@ -123,7 +146,7 @@ class AnchorThread(Thread):
             obj_info = datum['objects'][idx_obj]
             gta_coord = self.cal_gta_coordinate(obj_info[1:], width, height, rescaled_width, rescaled_height)
 
-            cv2.rectangle(image, (gta_coord[0], gta_coord[1]), (gta_coord[2], gta_coord[3]), (255, 255, 0))
+            # cv2.rectangle(image, (gta_coord[0], gta_coord[1]), (gta_coord[2], gta_coord[3]), (255, 255, 0))
             # anchor box coordinates on the rescaled image
             anchor_coord = self.cal_anchor_cooridinate(x_pos, y_pos, anc_scale, anc_rat, self.anchor_stride)
 
@@ -290,7 +313,7 @@ class AnchorGenerator(object):
         super(AnchorGenerator, self).__init__()
         self._dataset = dataset
         self.batch = batch
-
+        self._batch_generator = None
         self._augment = augment
 
         # Set Metadata
@@ -306,49 +329,35 @@ class AnchorGenerator(object):
         self.threads = list()
         self.task_count = deque()
 
-    def prepare_async_target(self) -> int:
-        """
-        Put a batch of data into worker threads to pre-process data
-        :return : the number of processed data
-        """
+    def _process_batch(self):
+
         if self._cur_idx >= self.n_data:
             self._cur_idx = 0
 
         batch_data = self._dataset[self._cur_idx:self._cur_idx + self.batch]
         n_images = len([worker_queue.put(datum, timeout=5) for datum in batch_data])
-
-        # Increase current index
         self._cur_idx += n_images
-        self.task_count.append(n_images)
 
-        return n_images
+        # thread_mgr = singleton_anchor_thread_manager()
+        # thread_mgr.restart()
 
-    def next_batch(self) -> Tuple[list, list, list]:
+    def next_batch(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Get a batch of pre-processed data from worker threads
+        There is just a single data in a batch, because the each image has its own different size,
+        it is hard to fit all images into a single formatted size for mini-batch.
+        Tensorflow requires that a single numpy array for a train_on_batch function.
+        But images of different shapes cannot be concatenated into a single array.
+
+        실제로는 batch data안에는 1개의 데이터만 존재한다.
+        이유는 각각의 이미지의 크기가 모두 달라서 mini-batch를 돌리기 위한 일정한 데이터 포맷의 형식을 갖추기가 어렵다.
         """
-        # Add batch to threads
-        self.prepare_async_target()
-        n_images = self.task_count.pop()
 
-        batch_img = list()
-        batch_cls = list()
-        batch_regr = list()
-        try:
-            for i in range(n_images):
-                image, cls_target, regr_target = producer_queue.get(timeout=10)
-                batch_img.append(image)
-                batch_cls.append(cls_target)
-                batch_regr.append(regr_target)
-                producer_queue.task_done()
-        except queue.Empty as e:
-            print('에러', e)
-            pass
+        if worker_queue.qsize() < 32:
+            self._process_batch()
 
-        thread_mgr = singleton_anchor_thread_manager()
-        thread_mgr.restart()
-
-        return batch_img, batch_cls, batch_regr
+        image, cls_target, regr_target = producer_queue.get(timeout=10)
+        producer_queue.task_done()
+        return image, cls_target, regr_target
 
 
 class AnchorThreadManager(object):

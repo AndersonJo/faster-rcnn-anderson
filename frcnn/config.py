@@ -19,7 +19,7 @@ class Config:
     # Region Proposal Network & Anchor
     ###################################
     # Thread
-    n_thread = 1
+    n_thread = 32
 
     # anchor box scales
     anchor_scales = [128, 256, 512]

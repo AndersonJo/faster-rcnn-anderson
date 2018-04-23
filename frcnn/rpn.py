@@ -1,5 +1,6 @@
 from typing import List, Tuple
 import numpy as np
+import keras.backend as K
 
 
 def create_rpn_regression_target(gta_coord: List[int], anchor_coord: List[int]) -> Tuple[float, float, float, float]:
@@ -43,3 +44,37 @@ def create_rpn_regression_target(gta_coord: List[int], anchor_coord: List[int]) 
     # th = np.log((gta[bbox_num, 3] - gta[bbox_num, 2]) / (y2_anc - y1_anc))
 
     return tx, ty, tw, th
+
+
+# Loss Functions
+
+def rpn_cls_loss(n_anchor: int):
+    """
+    :param n_anchor: the number of anchors
+    :return: classification loss function for region proposal network
+    """
+
+    def log_loss(y_true, y_pred):
+        y_true = y_true[:, :, :, :n_anchor]
+
+        cross_entorpy = y_true * K.binary_crossentropy(y_true, y_pred)
+        loss = K.sum(cross_entorpy)
+        return loss
+
+    return log_loss
+
+
+def rpn_reg_loss(n_class: int, huber_delta=1):
+    """
+    :param n_anchor: the number of classes
+    :return: regression loss function for region proposal network
+    """
+
+    def smooth_l1(y_true, y_pred):
+        y_true = y_true[:, :, :, 4 * n_class:]
+        x = K.abs(y_true - y_pred)
+        x = K.switch(x < huber_delta, 0.5 * x ** 2, x - 0.5 * huber_delta)
+        loss = K.sum(x)
+        return loss
+
+    return smooth_l1

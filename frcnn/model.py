@@ -6,15 +6,19 @@ from keras.applications.resnet50 import ResNet50
 from keras.applications.vgg16 import VGG16
 from keras.applications.vgg19 import VGG19
 from keras.layers import Conv2D
+from keras.optimizers import Adam
+
+from frcnn.rpn import rpn_cls_loss, rpn_reg_loss
 
 
 class FasterRCNN(object):
 
-    def __init__(self, basenet: str = 'vgg16', n_anchor: int = 9, input_shape: tuple = (None, None, 3),
-                 rpn_depth: int = 512):
+    def __init__(self, basenet: str = 'vgg16', n_anchor: int = 9, n_class: int = 20,
+                 input_shape: tuple = (None, None, 3), rpn_depth: int = 512):
         """
         :param basenet: 'vgg16', 'vgg19', 'resnet50'
         :param n_anchor: the number of anchors (usually 9)
+        :param n_class: the number of classes (PASCAL VOC is 20)
         :param input_shape: input_shape
         :param rpn_depth: the depth of the intermediate layer in Region Proposal Network (usually 256 or 512)
         """
@@ -22,6 +26,7 @@ class FasterRCNN(object):
         self.base_name = basenet.lower().strip()
         self.input_shape = input_shape
         self.n_anchor = n_anchor
+        self.n_class = n_class
 
         # Initialize Input Tensor
         self.input_img = None
@@ -98,29 +103,10 @@ class FasterRCNN(object):
         self.rpn_cls = classification
         self.rpn_reg = regression
         self.rpn_model = Model(self.input_img, outputs=[self.rpn_cls, self.rpn_reg])
-        # self.rpn_model.compile(Adam(lr=1e-5), loss=[])
 
-    @staticmethod
-    def rpn_cls_loss(y_true, y_pred, rpn_lambda: int = 10):
+        rpn_losses = [rpn_cls_loss(self.n_anchor), rpn_reg_loss(self.n_class)]
+        self.rpn_model.compile(Adam(lr=1e-5), loss=rpn_losses)
 
-        # rpn_lambda * K.sum(y_true[:, :, :, :num_anchors] * K.binary_crossentropy(y_pred[:, :, :, :],
-        #                                                                          y_true[:, :, :,
-        #                                                                          num_anchors:])) / K.sum(
-        #     epsilon + y_true[:, :, :, :num_anchors])
-        pass
-
-    @staticmethod
-    def rpn_reg_loss():
-        pass
-
-
-def singleton_frcnn(*args, **kwargs) -> FasterRCNN:
-    """
-    You are advised to use this method in production environment.
-    :return an instance of FasterRCNN class.
-    """
-    if hasattr(singleton_frcnn, 'singleton') and singleton_frcnn.singleton is not None:
-        return singleton_frcnn.singleton
-
-    singleton_frcnn.singleton = FasterRCNN(*args, **kwargs)
-    return singleton_frcnn.singleton
+    @property
+    def rpn(self) -> Model:
+        return self.rpn_model
