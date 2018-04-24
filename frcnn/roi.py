@@ -45,9 +45,6 @@ def non_max_suppression_fast(boxes, overlapThresh):
         xx2 = np.minimum(x2[i], x2[idxs[:last]])
         yy2 = np.minimum(y2[i], y2[idxs[:last]])
 
-        import ipdb
-        ipdb.set_trace()
-
         # compute the width and height of the bounding box
         w = np.maximum(0, xx2 - xx1 + 1)
         h = np.maximum(0, yy2 - yy1 + 1)

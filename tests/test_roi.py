@@ -31,7 +31,6 @@ def test_non_maximum_suppress():
             cv2.rectangle(image, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 0, 255), 2)
 
         picks = non_max_suppression_fast(bboxes, 0.3)
-        break
 
         for pick in picks:
             cv2.rectangle(image, (pick[0], pick[1]), (pick[2], pick[3]), (0, 255, 0), 2)
