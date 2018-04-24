@@ -12,8 +12,8 @@ def test_non_maximum_suppress():
     images = [
         ("nms/zombies_01.jpg", np.array([
             (180, 72, 244, 136),
-            (186, 72, 250, 136),
-            (186, 78, 250, 142)])),
+            (186, 78, 250, 142),
+            (186, 72, 250, 136)])),
         ("nms/zombies_02.jpg", np.array([
             (504, 306, 568, 370),
             (217, 150, 395, 328)])),
@@ -31,6 +31,7 @@ def test_non_maximum_suppress():
             cv2.rectangle(image, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 0, 255), 2)
 
         picks = non_max_suppression_fast(bboxes, 0.3)
+        break
 
         for pick in picks:
             cv2.rectangle(image, (pick[0], pick[1]), (pick[2], pick[3]), (0, 255, 0), 2)
