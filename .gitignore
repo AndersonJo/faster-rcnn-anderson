@@ -5,6 +5,7 @@
 
 # Project
 .idea
+.cache
 
 # Data
 temp

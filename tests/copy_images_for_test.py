@@ -27,14 +27,14 @@ parser = parser.parse_args()
 
 def copy_chunk(dataset: list):
     for voc in dataset:
-        # print(voc['image'])
-        os.path.basename(voc['image'])
-        voc_name = os.path.basename(os.path.dirname(os.path.dirname(voc['image'])))
-        filename = os.path.basename(voc['image'])
+        os.path.basename(voc['image_path'])
+        voc_name = os.path.basename(os.path.dirname(os.path.dirname(voc['image_path'])))
+        filename = os.path.basename(voc['image_path'])
 
         source_path = os.path.join(parser.source, voc_name, 'JPEGImages', filename)
         dest_path = os.path.join(DATASET_ROOT_PATH, voc_name, 'JPEGImages', filename)
 
+        print(dest_path)
         shutil.copy(source_path, dest_path)
 
 

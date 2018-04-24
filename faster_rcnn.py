@@ -1,18 +1,17 @@
 from argparse import ArgumentParser
 
-# Parse arguments
-from datetime import datetime
-
-from frcnn.model import FasterRCNN
-from frcnn.preprocessing import AnchorGenerator, AnchorThreadManager, singleton_anchor_thread_manager
 from frcnn.config import singleton_config, Config
+from frcnn.model import FasterRCNN
+from frcnn.preprocessing import AnchorGenerator, singleton_anchor_thread_manager
 from frcnn.voc import PascalVocData
+
+# Parse arguments
 
 parser = ArgumentParser(description='Faster R-CNN')
 parser.add_argument('--mode', default='train', type=str, help='train or test')
-parser.add_argument('--data-path', default='/data/VOCdevkit')
+parser.add_argument('--data', default='/data/VOCdevkit', type=str, help='the path of VOC or COCO dataset')
 
-# Base Model (Feature Extraction Network)
+# Base Model (Feature Extraction Network)ar
 parser.add_argument('--net', default='vgg16', type=str, help='base network (vgg, resnet)')
 
 # Reginon Proposal Network & Anchor
@@ -26,16 +25,13 @@ parser = parser.parse_args()
 
 def train(config: Config):
     # Load data
+
     vocdata = PascalVocData(config.data_path)
     train, test, classes = vocdata.load_data(limit_size=30)
     anchor = AnchorGenerator(train, batch=32)
 
     # Create Faster R-CNN Model
     frcnn = FasterRCNN(config.net_name, n_class=len(classes), rpn_depth=512)
-
-    # Initialize anchor threads
-    anchor_thread_mgr = singleton_anchor_thread_manager()
-    anchor_thread_mgr.initialize()
 
     # Train region proposal network
     batch_img, batch_cls, batch_regr = anchor.next_batch()
@@ -45,6 +41,8 @@ def train(config: Config):
 
     x = frcnn.rpn.train_on_batch(batch_img, batch_cls)
     print('x:', x)
+
+    anchor_thread_mgr = singleton_anchor_thread_manager()
     anchor_thread_mgr.wait()
 
 

@@ -2,14 +2,13 @@ import os
 from typing import List
 
 from frcnn.voc import PascalVocData
-
-DATASET_ROOT_PATH = '/data/VOCdevkit/'
+from tests import DATASET_ROOT_PATH
 
 
 def test_voc_dataset_integrity():
     """
      - check if an image file exists
-     - identify duplicate images in annotation data
+     - identify duplicate nms in annotation data
     :return:
     """
     voc = PascalVocData(DATASET_ROOT_PATH)
@@ -22,11 +21,11 @@ def test_voc_dataset_integrity():
 
         for x in data:
             # Check whether an image file exists
-            assert os.path.exists(x['image'])
+            assert os.path.exists(x['image_path'])
 
             # Check duplicate
-            assert x['image'] not in check._duplicate
-            check._duplicate.append(x['image'])
+            assert x['image_path'] not in check._duplicate
+            check._duplicate.append(x['image_path'])
 
             # if visualize:
             #     voc.visualize_img(x, 'files/haha{0}.jpg'.format(len(check._duplicate)))

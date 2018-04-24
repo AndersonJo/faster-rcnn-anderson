@@ -55,8 +55,8 @@ class AnchorThread(Thread):
         while True:
             try:
                 datum = self.receiver.get(timeout=3)
-            except queue.Empty:
-                print('Empty Receiver in Anchor Thread')
+            except queue.Empty as e:
+                print('Empty Receiver in Anchor Thread', e)
                 break
 
             rpn_target, regr_target, image = self.preprocess(datum)
@@ -311,6 +311,9 @@ class AnchorThread(Thread):
 class AnchorGenerator(object):
     def __init__(self, dataset: list, batch: int = 32, augment: bool = False):
         super(AnchorGenerator, self).__init__()
+
+        assert len(dataset) > 0
+
         self._dataset = dataset
         self.batch = batch
         self._batch_generator = None
@@ -338,24 +341,31 @@ class AnchorGenerator(object):
         n_images = len([worker_queue.put(datum, timeout=5) for datum in batch_data])
         self._cur_idx += n_images
 
-        # thread_mgr = singleton_anchor_thread_manager()
-        # thread_mgr.restart()
+        # Initialize or Restart Anchor Threads
+        anchor_thread_mgr = singleton_anchor_thread_manager()
+        anchor_thread_mgr.startup_threads()
+
+        print(worker_queue.qsize())
+        print(producer_queue.qsize())
 
     def next_batch(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         There is just a single data in a batch, because the each image has its own different size,
-        it is hard to fit all images into a single formatted size for mini-batch.
+        it is hard to fit all nms into a single formatted size for mini-batch.
         Tensorflow requires that a single numpy array for a train_on_batch function.
-        But images of different shapes cannot be concatenated into a single array.
+        But nms of different shapes cannot be concatenated into a single array.
 
         실제로는 batch data안에는 1개의 데이터만 존재한다.
         이유는 각각의 이미지의 크기가 모두 달라서 mini-batch를 돌리기 위한 일정한 데이터 포맷의 형식을 갖추기가 어렵다.
         """
-
         if worker_queue.qsize() < 32:
             self._process_batch()
 
-        image, cls_target, regr_target = producer_queue.get()
+        try:
+            image, cls_target, regr_target = producer_queue.get(timeout=3)
+        except queue.Empty as e:
+            print('AnchorGenerator Empty', e)
+
         producer_queue.task_done()
         return image, cls_target, regr_target
 
@@ -365,12 +375,26 @@ class AnchorThreadManager(object):
         self.n_thread = n_thread
         self.threads = list()
 
-    def initialize(self, start: bool = True) -> None:
-        for i in range(self.n_thread):
-            t = self._create_anchor_thread(start)
-            self.threads.append(t)
+    def startup_threads(self) -> int:
+        count = 0
+        for i, t in enumerate(self.threads):
+            if not t.isAlive():
+                t = self.create_anchor_thread(True)
+                self.threads[i] = t
+            count += 1
 
-    def _create_anchor_thread(self, start: bool = True) -> AnchorThread:
+        for i in range(max(0, self.n_thread - count)):
+            t = self.create_anchor_thread(True)
+            self.threads.append(t)
+            count += 1
+        return count
+
+    def wait(self):
+        for t in self.threads:
+            t.join()
+
+    @staticmethod
+    def create_anchor_thread(start: bool = True) -> AnchorThread:
         config = singleton_config()
         t = AnchorThread(worker_queue, producer_queue, config.anchor_scales, config.anchor_ratios, config.anchor_stride,
                          config.net_name, config.is_rescale, config.overlap_max, config.overlap_min)
@@ -379,16 +403,6 @@ class AnchorThreadManager(object):
         if start:
             t.start()
         return t
-
-    def restart(self):
-        for i, t in enumerate(self.threads):
-            if not t.isAlive():
-                t = self._create_anchor_thread(True)
-                self.threads[i] = t
-
-    def wait(self):
-        for t in self.threads:
-            t.join()
 
 
 def singleton_anchor_thread_manager() -> AnchorThreadManager:

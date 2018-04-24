@@ -68,6 +68,7 @@ class PascalVocData(BaseData):
         for voc_path in self.voc_paths:
             _test = [os.path.join(voc_path, 'ImageSets', 'Main', t) for t in self.TEST_FILES]
             _test = list(filter(lambda t: os.path.exists(t), _test))
+
             if len(_test) <= 0:
                 continue
             _test = _test[0]

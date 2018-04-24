@@ -51,7 +51,7 @@ def singleton_config(parser: argparse.Namespace = None) -> Config:
     config = Config()
     if parser is not None:
         # Data
-        config.data_path = parser.data_path
+        config.data_path = parser.data
         config.fen_name = parser.net
         config.n_thread = parser.thread
         config.is_rescale = parser.rescale
