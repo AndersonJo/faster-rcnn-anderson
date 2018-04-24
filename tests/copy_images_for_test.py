@@ -34,7 +34,6 @@ def copy_chunk(dataset: list):
         source_path = os.path.join(parser.source, voc_name, 'JPEGImages', filename)
         dest_path = os.path.join(DATASET_ROOT_PATH, voc_name, 'JPEGImages', filename)
 
-        print(dest_path)
         shutil.copy(source_path, dest_path)
 
 
