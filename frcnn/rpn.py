@@ -71,10 +71,12 @@ def rpn_reg_loss(n_class: int, huber_delta=1):
     """
 
     def smooth_l1(y_true, y_pred):
+        print('l1_loss', y_true.shape, y_pred.shape)
         y_true = y_true[:, :, :, 4 * n_class:]
         x = K.abs(y_true - y_pred)
         x = K.switch(x < huber_delta, 0.5 * x ** 2, x - 0.5 * huber_delta)
         loss = K.sum(x)
+        print('l1_loss:', loss)
         return loss
 
     return smooth_l1

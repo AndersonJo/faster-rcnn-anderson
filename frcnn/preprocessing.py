@@ -54,7 +54,7 @@ class AnchorThread(Thread):
     def run(self):
         while True:
             try:
-                datum = self.receiver.get(timeout=10)
+                datum = self.receiver.get(timeout=3)
             except queue.Empty:
                 print('Empty Receiver in Anchor Thread')
                 break
@@ -221,17 +221,17 @@ class AnchorThread(Thread):
             y_valid_box[neg_locs[0][val_locs], neg_locs[1][val_locs], neg_locs[2][val_locs]] = 0
 
         # Transform
-        y_cls_target = np.transpose(y_cls_target, (2, 0, 1))
-        y_valid_box = np.transpose(y_valid_box, (2, 0, 1))
-        y_regr_targets = np.transpose(y_regr_targets, (2, 0, 1))
+        # y_cls_target = np.transpose(y_cls_target, (2, 0, 1))
+        # y_valid_box = np.transpose(y_valid_box, (2, 0, 1))
+        # y_regr_targets = np.transpose(y_regr_targets, (2, 0, 1))
 
         y_cls_target = np.expand_dims(y_cls_target, axis=0)
         y_valid_box = np.expand_dims(y_valid_box, axis=0)
         y_regr_targets = np.expand_dims(y_regr_targets, axis=0)
 
         # Final target data
-        y_rpn_cls = np.concatenate([y_valid_box, y_cls_target], axis=1)
-        y_rpn_regr = np.concatenate([np.repeat(y_cls_target, 4, axis=1), y_regr_targets], axis=1)
+        y_rpn_cls = np.concatenate([y_valid_box, y_cls_target], axis=-1)
+        y_rpn_regr = np.concatenate([np.repeat(y_cls_target, 4, axis=-1), y_regr_targets], axis=-1)
 
         # cv2.imwrite('temp/{0}.png'.format(datum['filename']), image)
         return np.copy(y_rpn_cls), np.copy(y_rpn_regr)
@@ -355,7 +355,7 @@ class AnchorGenerator(object):
         if worker_queue.qsize() < 32:
             self._process_batch()
 
-        image, cls_target, regr_target = producer_queue.get(timeout=10)
+        image, cls_target, regr_target = producer_queue.get()
         producer_queue.task_done()
         return image, cls_target, regr_target
 

@@ -1,6 +1,7 @@
 from frcnn.preprocessing import AnchorGenerator
 from frcnn.voc import PascalVocData
 from tests import DATASET_ROOT_PATH
+import numpy as np
 
 
 def test_anchor():

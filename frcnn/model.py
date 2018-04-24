@@ -102,9 +102,10 @@ class FasterRCNN(object):
         self.rpn_layer = intermediate_layer
         self.rpn_cls = classification
         self.rpn_reg = regression
-        self.rpn_model = Model(self.input_img, outputs=[self.rpn_cls, self.rpn_reg])
+        self.rpn_model = Model(self.input_img, outputs=self.rpn_cls)
 
         rpn_losses = [rpn_cls_loss(self.n_anchor), rpn_reg_loss(self.n_class)]
+        rpn_losses = rpn_cls_loss(self.n_anchor)
         self.rpn_model.compile(Adam(lr=1e-5), loss=rpn_losses)
 
     @property
