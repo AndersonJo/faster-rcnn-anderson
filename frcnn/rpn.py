@@ -48,7 +48,7 @@ def create_rpn_regression_target(gta_coord: List[int], anchor_coord: List[int]) 
 
 # Loss Functions
 
-def rpn_cls_loss(n_anchor: int):
+def rpn_classification_loss(n_anchor: int):
     """
     :param n_anchor: the number of anchors
     :return: classification loss function for region proposal network
@@ -64,19 +64,19 @@ def rpn_cls_loss(n_anchor: int):
     return log_loss
 
 
-def rpn_reg_loss(n_class: int, huber_delta=1):
+def rpn_regression_loss(n_anchor: int, huber_delta: float = 1.):
     """
-    :param n_anchor: the number of classes
-    :return: regression loss function for region proposal network
+    :param n_anchor: the number of anchors
+    :param huber_delta: ....
+    :return: (x_center, y_center, width, height) * n_anchor
+             regression predictions for each of anchors
     """
 
     def smooth_l1(y_true, y_pred):
-        print('l1_loss', y_true.shape, y_pred.shape)
-        y_true = y_true[:, :, :, 4 * n_class:]
+        y_true = y_true[:, :, :, 4 * n_anchor:]
         x = K.abs(y_true - y_pred)
         x = K.switch(x < huber_delta, 0.5 * x ** 2, x - 0.5 * huber_delta)
         loss = K.sum(x)
-        print('l1_loss:', loss)
         return loss
 
     return smooth_l1

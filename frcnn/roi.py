@@ -1,7 +1,41 @@
+from typing import List
+
 import numpy as np
+from keras.engine import Layer
 
 
-def non_max_suppression_fast(boxes, overlapThresh):
+class RegionOfInterestPoolingLayer(Layer):
+
+    def __init__(self, size: List[int, int] = (), n_roi: int = 32, **kwargs):
+        """
+        See "Spatial Pyramid Pooling in Deep Convolutional Networks for Visual Recognition."
+
+        :param size: the pool size of height and width.  
+        :param n_roi: the number of regions of interest  
+        """
+        super(RegionOfInterestPoolingLayer, self).__init__(**kwargs)
+
+        assert len(size) == 2
+        self.pool_height = size[0]
+        self.pool_width = size[1]
+        self.n_roi = n_roi
+
+        self.n_channel = None
+
+    def build(self, input_shape):
+        super(RegionOfInterestPoolingLayer, self).build(input_shape)
+        self.n_channel = input_shape[0][-1]
+
+    def call(self, tensors):
+        features = tensors[0]
+        roi_input = tensors[1]
+
+
+    def compute_output_shape(self, input_shape):
+        return None, self.n_roi, self.pool_height, self.pool_width, self.n_channel
+
+
+def non_max_suppression_fast(boxes: np.ndarray, probs: np.ndarray = None, overlap_threshold: float = 0.3):
     """
     The code is here (https://www.pyimagesearch.com/2015/02/16/faster-non-maximum-suppression-python/)
     """
@@ -27,7 +61,12 @@ def non_max_suppression_fast(boxes, overlapThresh):
     # compute the area of the bounding boxes and sort the bounding
     # boxes by the bottom-right y-coordinate of the bounding box
     area = (x2 - x1 + 1) * (y2 - y1 + 1)
-    idxs = np.argsort(y2)
+
+    # Sort the bounding boxes on the basis of their scores
+    if probs is not None:
+        idxs = np.argsort(probs)
+    else:
+        idxs = np.argsort(y2)
 
     # keep looping while some indexes still remain in the indexes
     while len(idxs) > 0:
@@ -54,8 +93,13 @@ def non_max_suppression_fast(boxes, overlapThresh):
 
         # delete all indexes from the index list that have
         idxs = np.delete(idxs, np.concatenate(([last],
-                                               np.where(overlap > overlapThresh)[0])))
+                                               np.where(overlap > overlap_threshold)[0])))
 
     # return only the bounding boxes that were picked using the
     # integer data type
-    return boxes[pick].astype("int")
+    picked_boxes = boxes[pick].astype("int")
+    if probs is None:
+        return picked_boxes, None
+
+    picked_probs = probs[pick]
+    return picked_boxes, picked_probs

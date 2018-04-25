@@ -39,8 +39,15 @@ def train(config: Config):
     print('batch_cls:', batch_cls.shape)
     print('batch_regr:', batch_regr.shape)
 
-    x = frcnn.rpn.train_on_batch(batch_img, batch_cls)
-    print('x:', x)
+    loss_rpn = frcnn.rpn.train_on_batch(batch_img, [batch_cls, batch_regr])
+    print('loss_rpn:', loss_rpn)
+
+    cls_output, reg_output = frcnn.rpn.predict_on_batch(batch_img)
+    print('cls_output:', cls_output.shape)
+    print('reg_output:', reg_output.shape)
+
+
+
 
     anchor_thread_mgr = singleton_anchor_thread_manager()
     anchor_thread_mgr.wait()

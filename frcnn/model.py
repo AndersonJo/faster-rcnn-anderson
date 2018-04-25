@@ -1,4 +1,9 @@
-from typing import Tuple
+"""
+FasterRCNN class has a couple of models.
+ - Feature Extraction Network (VGG-16, VGG-19, Resnet50, etc)
+ - Region Proposal Network
+"""
+from typing import Tuple, List
 
 from keras import Model, Input
 from keras.applications.inception_v3 import InceptionV3
@@ -8,25 +13,37 @@ from keras.applications.vgg19 import VGG19
 from keras.layers import Conv2D
 from keras.optimizers import Adam
 
-from frcnn.rpn import rpn_cls_loss, rpn_reg_loss
+from frcnn.roi import RegionOfInterestPoolingLayer
+from frcnn.rpn import rpn_classification_loss, rpn_regression_loss
 
 
 class FasterRCNN(object):
 
-    def __init__(self, basenet: str = 'vgg16', n_anchor: int = 9, n_class: int = 20,
-                 input_shape: tuple = (None, None, 3), rpn_depth: int = 512):
+    def __init__(self, basenet: str = 'vgg16', input_shape: tuple = (None, None, 3), n_class: int = 20,
+                 n_anchor: int = 9, rpn_depth: int = 512,
+                 roi_pool_size: List[int] = (7, 7), n_roi: int = 32, roi_method: str = 'resize'):
         """
+        # Base Network (FEN)
         :param basenet: 'vgg16', 'vgg19', 'resnet50'
-        :param n_anchor: the number of anchors (usually 9)
-        :param n_class: the number of classes (PASCAL VOC is 20)
         :param input_shape: input_shape
+        :param n_class: the number of classes (PASCAL VOC is 20)
+
+        # Region Proposal Netowkr
+        :param n_anchor: the number of anchors (usually 9)
         :param rpn_depth: the depth of the intermediate layer in Region Proposal Network (usually 256 or 512)
+
+        # Region of Interest
+        :param roi_pool_size: size of roi pooling layer. (height, width)
+        :param n_roi: the number of regions of interest
+        :param roi_method: ('resize', 'pooling') how to do region of interest
+            - resize: this method is very simple but works properly
+            - pooling: slow but it does what paper says to do exactly
         """
         # Set instance members
-        self.base_name = basenet.lower().strip()
+        self.base_name = basenet.lower().strip()  # name of Base Network (FEN)
         self.input_shape = input_shape
-        self.n_anchor = n_anchor
-        self.n_class = n_class
+        self.n_anchor = n_anchor  # number of anchors
+        self.n_class = n_class  # number of classes (like car, human, bike, etc..)
 
         # Initialize Input Tensor
         self.input_img = None
@@ -43,6 +60,16 @@ class FasterRCNN(object):
         self.rpn_reg = None
         self.rpn_model = None
         self._init_rpn(rpn_depth)
+
+        # Initiliaze Region of Interest
+        assert len(roi_pool_size) == 2
+        self.roi_input = Input(shape=(n_roi, 4))
+        self.n_roi = n_roi
+        self.roi_method = roi_method
+        self.pool_height = roi_pool_size[0]
+        self.pool_widht = roi_pool_size[1]
+
+        self.roi_pooling_layer = RegionOfInterestPoolingLayer(size=roi_pool_size, n_roi=n_roi, method=roi_method)
 
     def _init_input(self):
         self.input_img = Input(shape=self.input_shape, name='image_input')
@@ -102,11 +129,13 @@ class FasterRCNN(object):
         self.rpn_layer = intermediate_layer
         self.rpn_cls = classification
         self.rpn_reg = regression
-        self.rpn_model = Model(self.input_img, outputs=self.rpn_cls)
+        self.rpn_model = Model(self.input_img, outputs=[self.rpn_cls, self.rpn_reg])
 
-        rpn_losses = [rpn_cls_loss(self.n_anchor), rpn_reg_loss(self.n_class)]
-        rpn_losses = rpn_cls_loss(self.n_anchor)
+        rpn_losses = [rpn_classification_loss(self.n_anchor), rpn_regression_loss(self.n_anchor)]
         self.rpn_model.compile(Adam(lr=1e-5), loss=rpn_losses)
+
+    def _init_classifier(self):
+        self.roi_pooling_layer([self.base_last_tensor, self.roi_input])
 
     @property
     def rpn(self) -> Model:
