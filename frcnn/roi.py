@@ -1,12 +1,14 @@
 from typing import List
 
+import keras.backend as K
 import numpy as np
+import tensorflow as tf
 from keras.engine import Layer
 
 
 class RegionOfInterestPoolingLayer(Layer):
 
-    def __init__(self, size: List[int, int] = (), n_roi: int = 32, **kwargs):
+    def __init__(self, size: List[int] = (), n_roi: int = 32, method: str = 'resize', **kwargs):
         """
         See "Spatial Pyramid Pooling in Deep Convolutional Networks for Visual Recognition."
 
@@ -14,22 +16,52 @@ class RegionOfInterestPoolingLayer(Layer):
         :param n_roi: the number of regions of interest  
         """
         super(RegionOfInterestPoolingLayer, self).__init__(**kwargs)
-
         assert len(size) == 2
+
         self.pool_height = size[0]
         self.pool_width = size[1]
         self.n_roi = n_roi
-
+        self.method = method
         self.n_channel = None
 
     def build(self, input_shape):
         super(RegionOfInterestPoolingLayer, self).build(input_shape)
         self.n_channel = input_shape[0][-1]
 
-    def call(self, tensors):
-        features = tensors[0]
-        roi_input = tensors[1]
+    def call(self, tensors: tf.Tensor, mask=None):
+        """
+        :param tensors
+            - tensors[0] image: the convolution features of FEN (like VGG-16) -> (batch, height, width, features)
+            - tensors[1] rois: RoI Input Tensor -> (batch, number of RoI, 4)
+        :param mask: ...
+        """
+        image = tensors[0]  # ex. (?, ?, ?, 512)
+        rois = tensors[1]  # ex. (?, 32, 4)
 
+        outputs = list()
+        for roi_idx in range(self.n_roi):
+            x = rois[0, roi_idx, 0]
+            y = rois[0, roi_idx, 1]
+            w = rois[0, roi_idx, 2]
+            h = rois[0, roi_idx, 3]
+
+            # row_length = w / float(self.pool_width)
+            # col_length = h / float(self.pool_height)
+
+            x = K.cast(x, 'int32')
+            y = K.cast(y, 'int32')
+            w = K.cast(w, 'int32')
+            h = K.cast(h, 'int32')
+
+            # (None, 7 pool_height, 7 pool_width, 512 n_features)
+            resized = tf.image.resize_images(image[:, y:y + h, x:x + w, :], (self.pool_height, self.pool_width))
+            outputs.append(resized)
+
+        final_output = K.concatenate(outputs, axis=0)
+        final_output = K.reshape(final_output, (1, self.n_roi, self.pool_height, self.pool_width, self.n_channel))
+        final_output = K.permute_dimensions(final_output, (0, 1, 2, 3, 4))
+
+        return final_output
 
     def compute_output_shape(self, input_shape):
         return None, self.n_roi, self.pool_height, self.pool_width, self.n_channel

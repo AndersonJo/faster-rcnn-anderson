@@ -1,7 +1,8 @@
 from argparse import ArgumentParser
 
 from frcnn.config import singleton_config, Config
-from frcnn.model import FasterRCNN
+from frcnn.model import FeatureExtractionNetwork, RegionProposalNetwork, ROINetwork
+
 from frcnn.preprocessing import AnchorGenerator, singleton_anchor_thread_manager
 from frcnn.voc import PascalVocData
 
@@ -25,13 +26,14 @@ parser = parser.parse_args()
 
 def train(config: Config):
     # Load data
-
     vocdata = PascalVocData(config.data_path)
     train, test, classes = vocdata.load_data(limit_size=30)
     anchor = AnchorGenerator(train, batch=32)
 
-    # Create Faster R-CNN Model
-    frcnn = FasterRCNN(config.net_name, n_class=len(classes), rpn_depth=512)
+    # Create Model
+    fen = FeatureExtractionNetwork(basenet=config.net_name, input_shape=(None, None, 3))
+    rpn = RegionProposalNetwork(fen, rpn_depth=512)
+    roi = ROINetwork(rpn, n_class=len(classes))
 
     # Train region proposal network
     batch_img, batch_cls, batch_regr = anchor.next_batch()
@@ -39,15 +41,13 @@ def train(config: Config):
     print('batch_cls:', batch_cls.shape)
     print('batch_regr:', batch_regr.shape)
 
-    loss_rpn = frcnn.rpn.train_on_batch(batch_img, [batch_cls, batch_regr])
+    loss_rpn = rpn.model.train_on_batch(batch_img, [batch_cls, batch_regr])
     print('loss_rpn:', loss_rpn)
 
-    cls_output, reg_output = frcnn.rpn.predict_on_batch(batch_img)
+    cls_output, reg_output = rpn.model.predict_on_batch(batch_img)
+
     print('cls_output:', cls_output.shape)
     print('reg_output:', reg_output.shape)
-
-
-
 
     anchor_thread_mgr = singleton_anchor_thread_manager()
     anchor_thread_mgr.wait()
