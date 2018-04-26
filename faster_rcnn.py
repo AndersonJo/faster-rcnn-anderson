@@ -1,9 +1,10 @@
 from argparse import ArgumentParser
 
 from frcnn.config import singleton_config, Config
-from frcnn.model import FeatureExtractionNetwork, RegionProposalNetwork
+from frcnn.fen import FeatureExtractionNetwork
 from frcnn.preprocessing import AnchorGenerator, singleton_anchor_thread_manager
 from frcnn.roi import ROINetwork
+from frcnn.rpn import RegionProposalNetwork
 from frcnn.voc import PascalVocData
 
 # Parse arguments

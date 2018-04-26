@@ -8,8 +8,8 @@ from keras import Input
 from keras.engine import Layer
 from keras.layers import TimeDistributed, Flatten, Dropout, Dense
 
-from frcnn.model import RegionProposalNetwork
 from frcnn.nms import non_max_suppression_fast
+from frcnn.rpn import RegionProposalNetwork
 
 
 class RegionOfInterestPoolingLayer(Layer):

@@ -2,7 +2,7 @@ import numpy as np
 from keras import Model
 from keras import backend as K
 
-from frcnn.model import FasterRCNN
+from frcnn.fen import FasterRCNN
 
 
 def test_faster_rcnn_model():

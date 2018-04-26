@@ -216,11 +216,14 @@ class AnchorThread(Thread):
             val_locs = random.sample(range(len(neg_locs[0])), n_neg - n_pos)
             y_valid_box[neg_locs[0][val_locs], neg_locs[1][val_locs], neg_locs[2][val_locs]] = 0
 
+        # Add batch dimension
         y_cls_target = np.expand_dims(y_cls_target, axis=0)
         y_valid_box = np.expand_dims(y_valid_box, axis=0)
         y_regr_targets = np.expand_dims(y_regr_targets, axis=0)
 
         # Final target data
+        # Classification loss in RPN only uses y_valid_box.
+        # Regression loss in RPN only uses y_regr_targets.
         y_rpn_cls = np.concatenate([y_valid_box, y_cls_target], axis=-1)
         y_rpn_regr = np.concatenate([np.repeat(y_cls_target, 4, axis=-1), y_regr_targets], axis=-1)
 
@@ -353,11 +356,11 @@ class AnchorGenerator(object):
             self._process_batch()
 
         try:
-            image, cls_target, regr_target = producer_queue.get(timeout=3)
+            image, cls_target, regr_target = producer_queue.get()
         except queue.Empty as e:
             print('AnchorGenerator Empty', e)
 
-        producer_queue.task_done()
+        # producer_queue.task_done()
         return image, cls_target, regr_target
 
 
