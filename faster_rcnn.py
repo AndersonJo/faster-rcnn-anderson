@@ -1,9 +1,9 @@
 from argparse import ArgumentParser
 
 from frcnn.config import singleton_config, Config
-from frcnn.model import FeatureExtractionNetwork, RegionProposalNetwork, ROINetwork
-
+from frcnn.model import FeatureExtractionNetwork, RegionProposalNetwork
 from frcnn.preprocessing import AnchorGenerator, singleton_anchor_thread_manager
+from frcnn.roi import ROINetwork
 from frcnn.voc import PascalVocData
 
 # Parse arguments
@@ -32,7 +32,7 @@ def train(config: Config):
 
     # Create Model
     fen = FeatureExtractionNetwork(basenet=config.net_name, input_shape=(None, None, 3))
-    rpn = RegionProposalNetwork(fen, rpn_depth=512)
+    rpn = RegionProposalNetwork(fen, config.anchor_scales, config.anchor_ratios, rpn_depth=512)
     roi = ROINetwork(rpn, n_class=len(classes))
 
     # Train region proposal network
@@ -49,6 +49,10 @@ def train(config: Config):
     print('cls_output:', cls_output.shape)
     print('reg_output:', reg_output.shape)
 
+    nms_anchors, nms_regrs = roi.to_roi(cls_output, reg_output)
+
+    import ipdb
+    ipdb.set_trace()
     anchor_thread_mgr = singleton_anchor_thread_manager()
     anchor_thread_mgr.wait()
 

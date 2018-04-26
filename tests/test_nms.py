@@ -1,6 +1,6 @@
 import cv2
 
-from frcnn.roi import non_max_suppression_fast
+from frcnn.nms import non_max_suppression_fast
 import numpy as np
 
 

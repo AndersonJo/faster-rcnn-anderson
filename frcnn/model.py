@@ -1,16 +1,15 @@
+import math
 from typing import List
 
-import numpy as np
 import tensorflow as tf
 from keras import Model, Input
 from keras.applications.inception_v3 import InceptionV3
 from keras.applications.resnet50 import ResNet50
 from keras.applications.vgg16 import VGG16
 from keras.applications.vgg19 import VGG19
-from keras.layers import Conv2D, TimeDistributed, Flatten, Dense, Dropout
+from keras.layers import Conv2D
 from keras.optimizers import Adam
 
-from frcnn.roi import RegionOfInterestPoolingLayer
 from frcnn.rpn import rpn_classification_loss, rpn_regression_loss
 
 
@@ -69,7 +68,10 @@ class FeatureExtractionNetwork(object):
 
 class RegionProposalNetwork(object):
 
-    def __init__(self, fen: FeatureExtractionNetwork, n_anchor: int = 9, rpn_depth: int = 512):
+    def __init__(self, fen: FeatureExtractionNetwork, anchor_scales: List[int] = (128, 256, 512),
+                 anchor_ratios: List[float] = ([1, 1], [1. / math.sqrt(2), 2. / math.sqrt(2)],
+                                               [2. / math.sqrt(2), 1. / math.sqrt(2)]),
+                 anchor_stride: List[int] = [16, 16], rpn_depth: int = 512):
         """
         # Region Proposal Network
         :param n_anchor: the number of anchors (usually 9)
@@ -78,7 +80,11 @@ class RegionProposalNetwork(object):
         self.fen = fen
 
         # Initialize Region Proposal Network
-        self.n_anchor = n_anchor  # number of anchors
+        self.anchor_scales = anchor_scales
+        self.anchor_ratios = anchor_ratios
+        self.n_anchor = len(anchor_scales) * len(anchor_ratios)  # number of anchors
+        self.anchor_stride = anchor_stride
+
         self.rpn_layer = None
         self.rpn_cls = None
         self.rpn_reg = None
@@ -117,52 +123,3 @@ class RegionProposalNetwork(object):
     @property
     def model(self) -> Model:
         return self.rpn_model
-
-
-class ROINetwork(object):
-
-    def __init__(self, rpn: RegionProposalNetwork, n_class: int = 20,
-                 n_roi: int = 32, roi_pool_size: List[int] = (7, 7), roi_method: str = 'resize'):
-        """
-        # Region of Interest
-        :param n_class: the number of classes (PASCAL VOC is 20)
-        :param n_roi: the number of regions of interest
-        :param roi_pool_size: size of roi pooling layer. (height, width)
-        :param roi_method: ('resize', 'pooling') how to do region of interest
-            - resize: this method is very simple but works properly
-            - pooling: slow but it does what paper says to do exactly
-        """
-        self.rpn = rpn
-
-        # Initiliaze Region of Interest
-        assert len(roi_pool_size) == 2
-        self.roi_input = Input(shape=(n_roi, 4))
-        self.n_class = n_class  # number of classes (like car, human, bike, etc..)
-        self.n_roi = n_roi
-        self.roi_method = roi_method
-        self.pool_height = roi_pool_size[0]
-        self.pool_widht = roi_pool_size[1]
-        self.roi_cls_output = None
-        self.roi_reg_output = None
-        self.roi_pooling_layer = RegionOfInterestPoolingLayer(size=roi_pool_size, n_roi=n_roi, method=roi_method)
-        self._init_classifier()
-
-    def _init_classifier(self) -> List[np.ndarray]:
-        roi_pooled_output = self.roi_pooling_layer([self.rpn.fen.output, self.roi_input])
-
-        h = TimeDistributed(Flatten(name='flatten'))(roi_pooled_output)
-        h = TimeDistributed(Dense(4096, activation='relu', name='roi_fc1'))(h)
-        h = TimeDistributed(Dropout(0.5))(h)
-        h = TimeDistributed(Dense(4096, activation='relu', name='roi_fc2'))(h)
-        h = TimeDistributed(Dropout(0.5))(h)
-
-        cls_output = TimeDistributed(Dense(self.n_class, activation='softmax', kernel_initializer='zero'),
-                                     name='roi_class_{}'.format(self.n_class))(h)
-
-        reg_output = TimeDistributed(Dense(4 * (self.n_class - 1), activation='linear', kernel_initializer='zero'),
-                                     name='roi_regress_{}'.format(self.n_class))(h)
-
-        self.roi_cls_output = cls_output
-        self.roi_reg_output = reg_output
-
-        return [cls_output, reg_output]

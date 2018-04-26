@@ -146,7 +146,6 @@ class AnchorThread(Thread):
             obj_info = datum['objects'][idx_obj]
             gta_coord = self.cal_gta_coordinate(obj_info[1:], width, height, rescaled_width, rescaled_height)
 
-            # cv2.rectangle(image, (gta_coord[0], gta_coord[1]), (gta_coord[2], gta_coord[3]), (255, 255, 0))
             # anchor box coordinates on the rescaled image
             anchor_coord = self.cal_anchor_cooridinate(x_pos, y_pos, anc_scale, anc_rat, self.anchor_stride)
 
@@ -181,13 +180,10 @@ class AnchorThread(Thread):
                 y_valid_box[y_pos, x_pos, z_pos] = 1
                 y_cls_target[y_pos, x_pos, z_pos] = 1
                 y_regr_targets[y_pos, x_pos, z_pos: z_pos + 4] = reg_target
-                # self.point(image, x_pos, y_pos, (255, 255, 0))
 
             elif iou < self.overlap_min and not is_valid_anchor:  # Negative anchors
                 y_valid_box[y_pos, x_pos, z_pos] = 1
                 y_cls_target[y_pos, x_pos, z_pos] = 0
-                # self.point(image, x_pos, y_pos)
-                # self.point(image, x_pos, y_pos, (200, 200, 155))
 
             elif not is_valid_anchor:
                 y_valid_box[y_pos, x_pos, z_pos] = 0
@@ -219,11 +215,6 @@ class AnchorThread(Thread):
         if n_neg + n_pos > self.max_anchor:
             val_locs = random.sample(range(len(neg_locs[0])), n_neg - n_pos)
             y_valid_box[neg_locs[0][val_locs], neg_locs[1][val_locs], neg_locs[2][val_locs]] = 0
-
-        # Transform
-        # y_cls_target = np.transpose(y_cls_target, (2, 0, 1))
-        # y_valid_box = np.transpose(y_valid_box, (2, 0, 1))
-        # y_regr_targets = np.transpose(y_regr_targets, (2, 0, 1))
 
         y_cls_target = np.expand_dims(y_cls_target, axis=0)
         y_valid_box = np.expand_dims(y_valid_box, axis=0)

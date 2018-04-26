@@ -32,6 +32,9 @@ class Config:
     # anchor stride of x and y
     anchor_stride = [16, 16]
 
+    # Depth
+    rpn_depth = 512
+
     # rescale input image
     is_rescale = True
 

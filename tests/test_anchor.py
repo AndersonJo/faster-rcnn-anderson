@@ -12,6 +12,3 @@ def test_anchor():
     anchor = AnchorGenerator(dataset)
     anchor.next_batch()
     anchor.next_batch()
-
-    import ipdb
-    ipdb.set_trace()
