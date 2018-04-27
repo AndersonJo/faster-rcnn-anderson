@@ -60,7 +60,7 @@ class AnchorThread(Thread):
                 break
 
             rpn_target, regr_target, image = self.preprocess(datum)
-            self.sender.put((image, rpn_target, regr_target))
+            self.sender.put((image, rpn_target, regr_target, datum))
 
             self.receiver.task_done()
             if self.receiver.empty():
@@ -74,7 +74,7 @@ class AnchorThread(Thread):
         :return:
         """
         image = cv2.imread(datum['image_path'])
-        width, height, _ = image.shape
+        height, width, _ = image.shape
 
         # Rescale Image: at least one side of image should be larger than or equal to minimum size;
         # It may improve accuracy but decrease training or inference speed in trade-off.
@@ -342,7 +342,7 @@ class AnchorGenerator(object):
         print(worker_queue.qsize())
         print(producer_queue.qsize())
 
-    def next_batch(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def next_batch(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
         """
         There is just a single data in a batch, because the each image has its own different size,
         it is hard to fit all nms into a single formatted size for mini-batch.
@@ -355,13 +355,14 @@ class AnchorGenerator(object):
         if worker_queue.qsize() < 32:
             self._process_batch()
 
+        image, cls_target, regr_target, datum = None, None, None, None
         try:
-            image, cls_target, regr_target = producer_queue.get()
+            image, cls_target, regr_target, datum = producer_queue.get()
         except queue.Empty as e:
             print('AnchorGenerator Empty', e)
 
         # producer_queue.task_done()
-        return image, cls_target, regr_target
+        return image, cls_target, regr_target, datum
 
 
 class AnchorThreadManager(object):

@@ -16,10 +16,12 @@ def test_image_rescale():
     assert (600, 800) == cal_rescaled_size(300, 400, min_side=600)
     assert (600, 840) == cal_rescaled_size(50, 70, min_side=600)
     assert (2400, 600) == cal_rescaled_size(800, 200, min_side=600)
-    assert (1024, 601) == cal_rescaled_size(1024, 601, min_side=600)
+    assert (1022, 600) == cal_rescaled_size(1024, 601, min_side=600)
     assert (600, 600) == cal_rescaled_size(600, 600, min_side=600)
     assert (1000, 1000) == cal_rescaled_size(600, 600, min_side=1000)
     assert (1000, 2250) == cal_rescaled_size(20, 45, min_side=1000)
+    assert (600, 1216) == cal_rescaled_size(1000, 2028, min_side=600)
+    assert (1216, 600) == cal_rescaled_size(2028, 1000, min_side=600)
 
     # Test Rescaled Image
     vocdata = PascalVocData(DATASET_ROOT_PATH)
@@ -33,13 +35,15 @@ def test_image_rescale():
 
         _img = cv2.imread(voc['image_path'])
         height, width, _ = _img.shape
-        resized_width, resized_height = cal_rescaled_size(voc['width'], voc['height'], min_side=1000)
+        resized_width, resized_height = cal_rescaled_size(voc['width'], voc['height'], min_side=600)
         resized_img = rescale_image(_img, resized_width, resized_height)
 
         # Check if the rescaled size is right
         assert voc['width'] == width
         assert voc['height'] == height
         assert (resized_height, resized_width, 3) == resized_img.shape
+        print(os.path.join('temp/', voc['filename']))
+        print(cv2.imwrite(os.path.join('temp/', voc['filename']), resized_img))
 
 
 def test_intersection_over_union():

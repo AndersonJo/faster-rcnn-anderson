@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def non_max_suppression_fast(boxes: np.ndarray, probs: np.ndarray = None, overlap_threshold: float = 0.3):
+def non_max_suppression_fast(boxes: np.ndarray, probs: np.ndarray = None, overlap_threshold: float = 0.3, max_box=300):
     """
     The code is here (https://www.pyimagesearch.com/2015/02/16/faster-non-maximum-suppression-python/)
     """
@@ -60,6 +60,9 @@ def non_max_suppression_fast(boxes: np.ndarray, probs: np.ndarray = None, overla
         # delete all indexes from the index list that have
         idxs = np.delete(idxs, np.concatenate(([last],
                                                np.where(overlap > overlap_threshold)[0])))
+
+        if len(pick) >= max_box:
+            break
 
     # return only the bounding boxes that were picked using the
     # integer data type

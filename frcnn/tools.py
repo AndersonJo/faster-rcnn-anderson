@@ -16,11 +16,9 @@ def cal_rescaled_size(width: int, height: int, min_side: int = 600) -> Tuple[int
     def _rescale(small: int, big: int) -> Tuple[int, int]:
         resized_big = float(min_side) * big / small
         resized_small = min_side
-        return int(resized_big), int(resized_small)
+        return int(resized_small), int(resized_big)
 
-    if width >= min_side and height >= min_side:
-        pass
-    elif width <= height:
+    if width <= height:
         width, height = _rescale(width, height)
     else:
         height, width = _rescale(height, width)
@@ -35,7 +33,7 @@ def rescale_image(img: np.ndarray, resized_width: int, resized_height: int) -> n
     :param resized_height:  height of the image
     :return: resized image
     """
-    return cv2.resize(img, (resized_width, resized_height), interpolation=cv2.INTER_CUBIC)
+    return cv2.resize(img, (resized_width, resized_height))
 
 
 def cal_fen_output_size(base_name: str, width: int, height: int) -> Tuple[int, int, int]:
