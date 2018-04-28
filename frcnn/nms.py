@@ -36,6 +36,7 @@ def non_max_suppression_fast(boxes: np.ndarray, probs: np.ndarray = None, overla
 
     # keep looping while some indexes still remain in the indexes
     while len(idxs) > 0:
+
         # grab the last index in the indexes list and add the
         # index value to the list of picked indexes
         last = len(idxs) - 1

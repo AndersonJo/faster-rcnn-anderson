@@ -1,5 +1,5 @@
 import math
-from datetime import datetime
+
 from typing import List, Tuple
 
 import keras.backend as K
@@ -140,26 +140,15 @@ class ROINetwork(object):
         :param overlap_threshold : overlap threshold used for Non Max Suppression
         :return: anchors and regressions, processed by Non Max Suppression
         """
-        now = datetime.now()
         anchor_scales = self.rpn.anchor_scales
         anchor_ratios = self.rpn.anchor_ratios
         _, fh, fw, n_anchor = rpn_cls_output.shape  # shape example (1, 37, 50, 9)
 
         anchors = np.zeros((4, fh, fw, n_anchor), dtype='int8')
 
-
-        # now = datetime.now()
-        from datetime import timedelta
-        times = dict()
-        times['01'] = timedelta()
-        times['02'] = timedelta()
-        times['03'] = timedelta()
-        times['04'] = timedelta()
         cur_anchor = 0
         for anchor_size in anchor_scales:
             for anchor_ratio in anchor_ratios:
-                now = datetime.now()
-
                 # anchor_width: Anchor's width on feature maps
                 #           For example, the sub-sampling ratio of VGG-16 is 16.
                 #           That is, the size of original image decrease in the ratio 6 to 1
@@ -169,20 +158,14 @@ class ROINetwork(object):
 
                 regr = rpn_reg_output[0, :, :, cur_anchor * 4: cur_anchor * 4 + 4]  # ex. (37, 50, 4)
                 regr = np.transpose(regr, (2, 0, 1))  # (4, 37, 50)
-                times['01'] += datetime.now() - now
-                now = datetime.now()
-                X, Y = np.meshgrid(np.arange(fw), np.arange(fh))
 
-                times['02'] += datetime.now() - now
-                now = datetime.now()
+                X, Y = np.meshgrid(np.arange(fw), np.arange(fh))
 
                 anchors[0, :, :, cur_anchor] = X  # the center coordinate of anchor's width
                 anchors[1, :, :, cur_anchor] = Y  # the center coordinate of anchor's height
                 anchors[2, :, :, cur_anchor] = anchor_width  # anchor width
                 anchors[3, :, :, cur_anchor] = anchor_height  # anchor height
                 anchors[:, :, :, cur_anchor] = self.reverse_rpn_regression(anchors[:, :, :, cur_anchor], regr)
-                times['03'] += datetime.now() - now
-                now = datetime.now()
 
                 # it makes sure that anchors' width and height are at least 1
                 anchors[2, :, :, cur_anchor] = np.maximum(1, anchors[2, :, :, cur_anchor])
@@ -196,14 +179,8 @@ class ROINetwork(object):
                 anchors[2, :, :, cur_anchor] = np.minimum(fw - 1, anchors[2, :, :, cur_anchor])
                 anchors[3, :, :, cur_anchor] = np.minimum(fh - 1, anchors[3, :, :, cur_anchor])
 
-                import ipdb
-                ipdb.set_trace()
-
                 cur_anchor += 1
-                times['04'] += datetime.now() - now
-                now = datetime.now()
 
-        print(times)
         # A.transpose((0, 3, 1, 2)) : (4, 38 height, 50 widht, 9) -> (4, 9, 38 height, 50 width)
         # np.reshape(A.transpose((0, 3, 1, 2)), (4, -1)) : -> (4, 17100)
         all_boxes = np.reshape(anchors.transpose((0, 3, 1, 2)), (4, -1)).transpose((1, 0))  # (17100, 4)
@@ -219,10 +196,9 @@ class ROINetwork(object):
         all_boxes = np.delete(all_boxes, idxs, 0)
         all_probs = np.delete(all_probs, idxs, 0)
 
-        # print('xxxxxxxxxxxxxxxxxxxxxx 02:', datetime.now() - now)
-        # now = datetime.now()
-        nms_anchors, nms_regrs = non_max_suppression_fast(all_boxes, all_probs, overlap_threshold=overlap_threshold, max_box=300)
-        # print('xxxxxxxxxxxxxxxxxxxxxx 03:', datetime.now() - now)
+        nms_anchors, nms_regrs = non_max_suppression_fast(all_boxes, all_probs, overlap_threshold=overlap_threshold,
+                                                          max_box=300)
+
         return nms_anchors, nms_regrs
 
     @staticmethod
@@ -263,8 +239,6 @@ class ROINetwork(object):
         g_w = np.round(g_w)
         g_h = np.round(g_h)
 
-        import ipdb
-        ipdb.set_trace()
         return np.stack([min_gx, min_gy, g_w, g_h])
 
     @staticmethod

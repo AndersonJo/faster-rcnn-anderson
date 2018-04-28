@@ -1,7 +1,17 @@
+from datetime import datetime
+
 import cv2
 
+from frcnn.config import singleton_config
+from frcnn.fen import FeatureExtractionNetwork
 from frcnn.nms import non_max_suppression_fast
 import numpy as np
+
+from frcnn.preprocessing import AnchorGenerator
+from frcnn.roi import ROINetwork
+from frcnn.rpn import RegionProposalNetwork
+from frcnn.voc import PascalVocData
+from tests import DATASET_ROOT_PATH
 
 
 def test_non_maximum_suppress():
@@ -74,5 +84,29 @@ def test_non_maximum_suppress_with_probabilities():
         cv2.imwrite('nms/prob_{0}.jpg'.format(i), image)
 
 
-def test_region_of_interest():
-    pass
+def _test_nms():
+    """
+    performance test
+    """
+
+    # Get config
+    config = singleton_config()
+
+    # Get Data
+    vocdata = PascalVocData(DATASET_ROOT_PATH)
+    train, test, classes = vocdata.load_data(limit_size=30)
+    anchor = AnchorGenerator(train, batch=6)
+
+    # Create Model
+    fen = FeatureExtractionNetwork(basenet='vgg16', input_shape=(None, None, 3))
+    rpn = RegionProposalNetwork(fen, config.anchor_scales, config.anchor_ratios, rpn_depth=512)
+    roi = ROINetwork(rpn, n_class=len(classes))
+
+    # Predict
+    now = datetime.now()
+    for i in range(100):
+        batch_image, cls_target, reg_target, datum = anchor.next_batch()
+        cls_output, reg_output = rpn.model.predict_on_batch(batch_image)
+        nms_anchors, nms_regrs = roi.rpn_to_roi(cls_output, reg_output)
+
+    print('최종:', datetime.now() - now)

@@ -42,8 +42,8 @@ def test_image_rescale():
         assert voc['width'] == width
         assert voc['height'] == height
         assert (resized_height, resized_width, 3) == resized_img.shape
-        print(os.path.join('temp/', voc['filename']))
-        print(cv2.imwrite(os.path.join('temp/', voc['filename']), resized_img))
+        # print(os.path.join('temp/', voc['filename']))
+        # print(cv2.imwrite(os.path.join('temp/', voc['filename']), resized_img))
 
 
 def test_intersection_over_union():

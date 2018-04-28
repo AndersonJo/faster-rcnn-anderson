@@ -1,10 +1,6 @@
 import itertools
-import queue
 import random
-from collections import deque
-from queue import Queue
-from threading import Thread
-from typing import List, Tuple, Generator
+from typing import List, Tuple
 
 import cv2
 import numpy as np
@@ -14,22 +10,17 @@ from frcnn.iou import cal_iou
 from frcnn.rpn import create_rpn_regression_target
 from frcnn.tools import cal_rescaled_size, rescale_image, cal_fen_output_size
 
-worker_queue = Queue()
-producer_queue = Queue()
 
-
-class AnchorThread(Thread):
+class AnchorProcessor(object):
     # Anchor Type for Regression of Region Proposal Network
     ANCHOR_NEGATIVE = 0
     ANCHOR_NEUTRAL = 1
     ANCHOR_POSITIVE = 2
 
-    def __init__(self, receiver: Queue, sender: Queue, anchor_scales: List[int], anchor_ratios: List[float],
+    def __init__(self, anchor_scales: List[int], anchor_ratios: List[float],
                  anchor_stride: List[int] = (16, 16), net_name: str = 'vgg16', rescale: bool = True,
                  overlap_min: float = 0.3, overlap_max: float = 0.6, max_anchor: int = 256):
         """
-        :param receiver: Queue to receive data from producer
-        :param sender: Queue to send data from anchor thread
         :param anchor_scales: a list of anchor scales
         :param anchor_ratios: a list of anchor ratios
         :param anchor_stride: stride value used for generating anchors
@@ -39,9 +30,6 @@ class AnchorThread(Thread):
         :param overlap_max: determines positive anchors if the iou value is over the overlap_max
         :param max_anchor: it limits the number of negative and positive anchors
         """
-        super(AnchorThread, self).__init__()
-        self.receiver = receiver
-        self.sender = sender
         self._rescale = rescale
         self._net_name = net_name
         self.anchor_scales = anchor_scales.copy()
@@ -50,21 +38,6 @@ class AnchorThread(Thread):
         self.overlap_min = overlap_min
         self.overlap_max = overlap_max
         self.max_anchor = max_anchor
-
-    def run(self):
-        while True:
-            try:
-                datum = self.receiver.get(timeout=3)
-            except queue.Empty as e:
-                print('Empty Receiver in Anchor Thread', e)
-                break
-
-            rpn_target, regr_target, image = self.preprocess(datum)
-            self.sender.put((image, rpn_target, regr_target, datum))
-
-            self.receiver.task_done()
-            if self.receiver.empty():
-                break
 
     def preprocess(self, datum: dict) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -303,14 +276,12 @@ class AnchorThread(Thread):
 
 
 class AnchorGenerator(object):
-    def __init__(self, dataset: list, batch: int = 32, augment: bool = False):
+    def __init__(self, dataset: list, shuffle: bool = True, augment: bool = False):
         super(AnchorGenerator, self).__init__()
 
         assert len(dataset) > 0
-
-        self._dataset = dataset
-        self.batch = batch
-        self._batch_generator = None
+        self._shuffle = shuffle
+        self._dataset = np.array(dataset)
         self._augment = augment
 
         # Set Metadata
@@ -322,88 +293,32 @@ class AnchorGenerator(object):
         # Get Config
         self._config = singleton_config()
 
-        # Threads
-        self.threads = list()
-        self.task_count = deque()
+        # Synced Anchor
+        self._anchor = self.create_anchor_thread()
 
-    def _process_batch(self):
+    @property
+    def anchor(self) -> AnchorProcessor:
+        return self._anchor
 
+    def next_batch(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
         if self._cur_idx >= self.n_data:
             self._cur_idx = 0
 
-        batch_data = self._dataset[self._cur_idx:self._cur_idx + self.batch]
-        n_images = len([worker_queue.put(datum, timeout=5) for datum in batch_data])
-        self._cur_idx += n_images
+        if self._cur_idx and self._shuffle:
+            perm = np.random.permutation(len(self._dataset))
+            self._dataset = self._dataset[perm]
 
-        # Initialize or Restart Anchor Threads
-        anchor_thread_mgr = singleton_anchor_thread_manager()
-        anchor_thread_mgr.startup_threads()
+        datum = self._dataset[self._cur_idx]
 
-        print(worker_queue.qsize())
-        print(producer_queue.qsize())
+        self._cur_idx += 1
 
-    def next_batch(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
-        """
-        There is just a single data in a batch, because the each image has its own different size,
-        it is hard to fit all nms into a single formatted size for mini-batch.
-        Tensorflow requires that a single numpy array for a train_on_batch function.
-        But nms of different shapes cannot be concatenated into a single array.
-
-        실제로는 batch data안에는 1개의 데이터만 존재한다.
-        이유는 각각의 이미지의 크기가 모두 달라서 mini-batch를 돌리기 위한 일정한 데이터 포맷의 형식을 갖추기가 어렵다.
-        """
-        if worker_queue.qsize() < 32:
-            self._process_batch()
-
-        image, cls_target, regr_target, datum = None, None, None, None
-        try:
-            image, cls_target, regr_target, datum = producer_queue.get()
-        except queue.Empty as e:
-            print('AnchorGenerator Empty', e)
-
-        # producer_queue.task_done()
-        return image, cls_target, regr_target, datum
-
-
-class AnchorThreadManager(object):
-    def __init__(self, n_thread: int = 12):
-        self.n_thread = n_thread
-        self.threads = list()
-
-    def startup_threads(self) -> int:
-        count = 0
-        for i, t in enumerate(self.threads):
-            if not t.isAlive():
-                t = self.create_anchor_thread(True)
-                self.threads[i] = t
-            count += 1
-
-        for i in range(max(0, self.n_thread - count)):
-            t = self.create_anchor_thread(True)
-            self.threads.append(t)
-            count += 1
-        return count
-
-    def wait(self):
-        for t in self.threads:
-            t.join()
+        cls_target, reg_target, image = self.anchor.preprocess(datum)
+        return image, cls_target, reg_target, datum
 
     @staticmethod
-    def create_anchor_thread(start: bool = True) -> AnchorThread:
+    def create_anchor_thread() -> AnchorProcessor:
         config = singleton_config()
-        t = AnchorThread(worker_queue, producer_queue, config.anchor_scales, config.anchor_ratios, config.anchor_stride,
-                         config.net_name, config.is_rescale, config.overlap_max, config.overlap_min)
-        t.setDaemon(True)
+        anchor = AnchorProcessor(config.anchor_scales, config.anchor_ratios, config.anchor_stride,
+                                 config.net_name, config.is_rescale, config.overlap_max, config.overlap_min)
 
-        if start:
-            t.start()
-        return t
-
-
-def singleton_anchor_thread_manager() -> AnchorThreadManager:
-    if hasattr(singleton_anchor_thread_manager, 'singleton'):
-        return singleton_anchor_thread_manager.singleton
-
-    config = singleton_config()
-    singleton_anchor_thread_manager.singleton = AnchorThreadManager(config.n_thread)
-    return singleton_anchor_thread_manager.singleton
+        return anchor

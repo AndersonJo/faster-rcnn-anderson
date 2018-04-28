@@ -18,9 +18,6 @@ class Config:
     ###################################
     # Region Proposal Network & Anchor
     ###################################
-    # Thread
-    n_thread = 32
-
     # anchor box scales
     anchor_scales = [128, 256, 512]
 
@@ -56,7 +53,6 @@ def singleton_config(parser: argparse.Namespace = None) -> Config:
         # Data
         config.data_path = parser.data
         config.fen_name = parser.net
-        config.n_thread = parser.thread
         config.is_rescale = parser.rescale
 
     singleton_config.singleton = config

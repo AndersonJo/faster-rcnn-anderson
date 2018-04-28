@@ -1,12 +1,13 @@
 from argparse import ArgumentParser
 from datetime import datetime
 
+import cv2
 import tensorflow as tf
 from keras.backend.tensorflow_backend import set_session
 
 from frcnn.config import singleton_config, Config
 from frcnn.fen import FeatureExtractionNetwork
-from frcnn.preprocessing import AnchorGenerator, singleton_anchor_thread_manager
+from frcnn.preprocessing import AnchorGenerator
 from frcnn.roi import ROINetwork
 from frcnn.rpn import RegionProposalNetwork
 from frcnn.voc import PascalVocData
@@ -21,7 +22,6 @@ parser.add_argument('--data', default='/data/VOCdevkit', type=str, help='the pat
 parser.add_argument('--net', default='vgg16', type=str, help='base network (vgg, resnet)')
 
 # Reginon Proposal Network & Anchor
-parser.add_argument('--thread', default=16, type=int, help='the number of threads for rpn target data')
 parser.add_argument('--rescale', default=True, type=bool, help='Rescale input image to lager one')
 
 # Region Proposal Network Configuration
@@ -39,7 +39,7 @@ def train(config: Config):
     # Load data
     vocdata = PascalVocData(config.data_path)
     train, test, classes = vocdata.load_data(limit_size=30)
-    anchor = AnchorGenerator(train, batch=32)
+    anchor = AnchorGenerator(train, shuffle=True, augment=True)
 
     # Create Model
     fen = FeatureExtractionNetwork(basenet=config.net_name, input_shape=(None, None, 3))
@@ -54,12 +54,10 @@ def train(config: Config):
         # print('batch_cls:', batch_cls.shape)
         # print('batch_regr:', batch_regr.shape)
         # print('next batch 처리시간:', datetime.now() - now)
-        now = datetime.now()
 
         loss_rpn = rpn.model.train_on_batch(batch_img, [batch_cls, batch_regr])
         # print('loss_rpn:', loss_rpn)
         # print('rpn.model.train_on_batch 처리시간:', datetime.now() - now)
-        now = datetime.now()
 
         cls_output, reg_output = rpn.model.predict_on_batch(batch_img)
 
@@ -67,9 +65,8 @@ def train(config: Config):
         # print('reg_output:', reg_output.shape)
         # print('rpn.model.predict_on_batch 처리시간:', datetime.now() - now)
 
-        now = datetime.now()
         nms_anchors, nms_regrs = roi.rpn_to_roi(cls_output, reg_output)
-        print('rpn_to_roi 처리시간:', datetime.now() - now)
+        print('rpn_to_roi 까지 처리시간:', datetime.now() - now)
 
         # image = cv2.imread(datum['image_path'])
         # image = cv2.resize(image, (datum['rescaled_width'], datum['rescaled_height']))
@@ -78,12 +75,6 @@ def train(config: Config):
         #     anc = nms_anchors[i] * 16
         #     cv2.rectangle(image, (anc[0], anc[1]), (anc[0] + 5, anc[1] + 5), (0, 0, 255))
         # cv2.imwrite(datum['filename'], image)
-
-    import ipdb
-    ipdb.set_trace()
-
-    anchor_thread_mgr = singleton_anchor_thread_manager()
-    anchor_thread_mgr.wait()
 
 
 if __name__ == '__main__':
