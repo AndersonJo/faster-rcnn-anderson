@@ -8,6 +8,8 @@ class Config:
     # Dataset
     ###################################
     data_path = '/data/VOCdevkit'
+    shuffle = True
+    augment = True
 
     ###################################
     # BaseNetwork

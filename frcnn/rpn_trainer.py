@@ -11,7 +11,7 @@ from frcnn.rpn import create_rpn_regression_target
 from frcnn.tools import cal_rescaled_size, rescale_image, cal_fen_output_size
 
 
-class AnchorProcessor(object):
+class RPNTargetProcessor(object):
     # Anchor Type for Regression of Region Proposal Network
     ANCHOR_NEGATIVE = 0
     ANCHOR_NEUTRAL = 1
@@ -275,9 +275,9 @@ class AnchorProcessor(object):
         cv2.rectangle(image, (x_pos * 16, y_pos * 16), (x_pos * 16 + 5, y_pos * 16 + 5), color)
 
 
-class AnchorGenerator(object):
+class RPNTargetGenerator(object):
     def __init__(self, dataset: list, shuffle: bool = True, augment: bool = False):
-        super(AnchorGenerator, self).__init__()
+        super(RPNTargetGenerator, self).__init__()
 
         assert len(dataset) > 0
         self._shuffle = shuffle
@@ -297,7 +297,7 @@ class AnchorGenerator(object):
         self._anchor = self.create_anchor_thread()
 
     @property
-    def anchor(self) -> AnchorProcessor:
+    def anchor(self) -> RPNTargetProcessor:
         return self._anchor
 
     def next_batch(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
@@ -316,9 +316,9 @@ class AnchorGenerator(object):
         return image, cls_target, reg_target, datum
 
     @staticmethod
-    def create_anchor_thread() -> AnchorProcessor:
+    def create_anchor_thread() -> RPNTargetProcessor:
         config = singleton_config()
-        anchor = AnchorProcessor(config.anchor_scales, config.anchor_ratios, config.anchor_stride,
-                                 config.net_name, config.is_rescale, config.overlap_max, config.overlap_min)
+        anchor = RPNTargetProcessor(config.anchor_scales, config.anchor_ratios, config.anchor_stride,
+                                    config.net_name, config.is_rescale, config.overlap_max, config.overlap_min)
 
         return anchor

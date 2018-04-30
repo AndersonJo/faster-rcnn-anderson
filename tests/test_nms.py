@@ -7,8 +7,8 @@ from frcnn.fen import FeatureExtractionNetwork
 from frcnn.nms import non_max_suppression_fast
 import numpy as np
 
-from frcnn.preprocessing import AnchorGenerator
-from frcnn.roi import ROINetwork
+from frcnn.rpn_trainer import RPNTargetGenerator
+from frcnn.detector import DetectionNetwork
 from frcnn.rpn import RegionProposalNetwork
 from frcnn.voc import PascalVocData
 from tests import DATASET_ROOT_PATH
@@ -95,12 +95,12 @@ def _test_nms():
     # Get Data
     vocdata = PascalVocData(DATASET_ROOT_PATH)
     train, test, classes = vocdata.load_data(limit_size=30)
-    anchor = AnchorGenerator(train, batch=6)
+    anchor = RPNTargetGenerator(train, batch=6)
 
     # Create Model
     fen = FeatureExtractionNetwork(basenet='vgg16', input_shape=(None, None, 3))
     rpn = RegionProposalNetwork(fen, config.anchor_scales, config.anchor_ratios, rpn_depth=512)
-    roi = ROINetwork(rpn, n_class=len(classes))
+    roi = DetectionNetwork(rpn, n_class=len(classes))
 
     # Predict
     now = datetime.now()

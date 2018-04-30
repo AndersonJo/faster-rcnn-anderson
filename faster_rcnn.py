@@ -6,26 +6,23 @@ import tensorflow as tf
 from keras.backend.tensorflow_backend import set_session
 
 from frcnn.config import singleton_config, Config
+from frcnn.detector_trainer import DetectorTrainer
 from frcnn.fen import FeatureExtractionNetwork
-from frcnn.preprocessing import AnchorGenerator
-from frcnn.roi import ROINetwork
+from frcnn.rpn_trainer import RPNTargetGenerator
+from frcnn.detector import DetectionNetwork
 from frcnn.rpn import RegionProposalNetwork
 from frcnn.voc import PascalVocData
 
-# Parse arguments
-
+# Parser:: Basic Arguments
 parser = ArgumentParser(description='Faster R-CNN')
 parser.add_argument('--mode', default='train', type=str, help='train or test')
 parser.add_argument('--data', default='/data/VOCdevkit', type=str, help='the path of VOC or COCO dataset')
 
-# Base Model (Feature Extraction Network)ar
+# Parser:: Base Model (Feature Extraction Network)
 parser.add_argument('--net', default='vgg16', type=str, help='base network (vgg, resnet)')
 
-# Reginon Proposal Network & Anchor
+# Parser:: Reginon Proposal Network & Anchor
 parser.add_argument('--rescale', default=True, type=bool, help='Rescale input image to lager one')
-
-# Region Proposal Network Configuration
-
 parser = parser.parse_args()
 
 # Momory Limit
@@ -39,17 +36,20 @@ def train(config: Config):
     # Load data
     vocdata = PascalVocData(config.data_path)
     train, test, classes = vocdata.load_data(limit_size=30)
-    anchor = AnchorGenerator(train, shuffle=True, augment=True)
+
+    # Load training tools
+    rpn_trainer = RPNTargetGenerator(train, shuffle=True, augment=True)
+    detector_trainer = DetectorTrainer()
 
     # Create Model
     fen = FeatureExtractionNetwork(basenet=config.net_name, input_shape=(None, None, 3))
     rpn = RegionProposalNetwork(fen, config.anchor_scales, config.anchor_ratios, rpn_depth=512)
-    roi = ROINetwork(rpn, n_class=len(classes))
+    roi = DetectionNetwork(rpn, n_class=len(classes))
 
     for _ in range(10):
         # Train region proposal network
         now = datetime.now()
-        batch_img, batch_cls, batch_regr, datum = anchor.next_batch()
+        batch_img, batch_cls, batch_regr, datum = rpn_trainer.next_batch()
         # print('batch_img:', batch_img.shape)
         # print('batch_cls:', batch_cls.shape)
         # print('batch_regr:', batch_regr.shape)
@@ -65,7 +65,7 @@ def train(config: Config):
         # print('reg_output:', reg_output.shape)
         # print('rpn.model.predict_on_batch 처리시간:', datetime.now() - now)
 
-        nms_anchors, nms_regrs = roi.rpn_to_roi(cls_output, reg_output)
+        detector_trainer(cls_output, reg_output)
         print('rpn_to_roi 까지 처리시간:', datetime.now() - now)
 
         # image = cv2.imread(datum['image_path'])
