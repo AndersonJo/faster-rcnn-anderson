@@ -1,4 +1,4 @@
-from frcnn.rpn_trainer import RPNTargetGenerator
+from frcnn.rpn_trainer import RPNTrainer
 from frcnn.voc import PascalVocData
 from tests import DATASET_ROOT_PATH
 import numpy as np
@@ -9,6 +9,6 @@ def test_anchor():
     train, test, classes = vocdata.load_data()
     dataset = train + test
 
-    anchor = RPNTargetGenerator(dataset)
+    anchor = RPNTrainer(dataset)
     anchor.next_batch()
     anchor.next_batch()

@@ -11,14 +11,11 @@ class Config:
     shuffle = True
     augment = True
 
-    ###################################
-    # BaseNetwork
-    ###################################
-    # Base Network Name
-    net_name = 'vgg16'
+    # rescale input image
+    is_rescale = True
 
     ###################################
-    # Region Proposal Network & Anchor
+    # Anchors
     ###################################
     # anchor box scales
     anchor_scales = [128, 256, 512]
@@ -31,15 +28,26 @@ class Config:
     # anchor stride of x and y
     anchor_stride = [16, 16]
 
+    ###################################
+    # BaseNetwork
+    ###################################
+    net_name = 'vgg16'
+
+    ###################################
+    # Region Proposal Network & Anchor
+    ###################################
     # Depth
     rpn_depth = 512
 
-    # rescale input image
-    is_rescale = True
-
     # overlaps for RPN
-    overlap_min = 0.3
-    overlap_max = 0.7
+    rpn_min_overlap = 0.3
+    rpn_max_overlap = 0.7
+
+    ###################################
+    # Detector Network
+    ###################################
+    detector_min_overlap = 0.1
+    detector_max_overlap = 0.7
 
     @property
     def n_anchor(self) -> int:

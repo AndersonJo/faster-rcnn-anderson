@@ -4,10 +4,10 @@ import cv2
 
 from frcnn.config import singleton_config
 from frcnn.fen import FeatureExtractionNetwork
-from frcnn.nms import non_max_suppression_fast
+from frcnn.nms import non_max_suppression
 import numpy as np
 
-from frcnn.rpn_trainer import RPNTargetGenerator
+from frcnn.rpn_trainer import RPNTrainer
 from frcnn.detector import DetectionNetwork
 from frcnn.rpn import RegionProposalNetwork
 from frcnn.voc import PascalVocData
@@ -40,7 +40,7 @@ def test_non_maximum_suppress():
         for bbox in bboxes:
             cv2.rectangle(image, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 0, 255), 2)
 
-        picks, _ = non_max_suppression_fast(bboxes, overlap_threshold=0.3)
+        picks, _ = non_max_suppression(bboxes, overlap_threshold=0.3)
 
         for pick in picks:
             cv2.rectangle(image, (pick[0], pick[1]), (pick[2], pick[3]), (0, 255, 0), 2)
@@ -77,7 +77,7 @@ def test_non_maximum_suppress_with_probabilities():
         for bbox in bboxes:
             cv2.rectangle(image, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 0, 255), 2)
 
-        picks, probs = non_max_suppression_fast(bboxes, prob, overlap_threshold=0.3)
+        picks, probs = non_max_suppression(bboxes, prob, overlap_threshold=0.3)
 
         for pick in picks:
             cv2.rectangle(image, (pick[0], pick[1]), (pick[2], pick[3]), (0, 255, 0), 2)
@@ -95,7 +95,7 @@ def _test_nms():
     # Get Data
     vocdata = PascalVocData(DATASET_ROOT_PATH)
     train, test, classes = vocdata.load_data(limit_size=30)
-    anchor = RPNTargetGenerator(train, batch=6)
+    anchor = RPNTrainer(train, batch=6)
 
     # Create Model
     fen = FeatureExtractionNetwork(basenet='vgg16', input_shape=(None, None, 3))

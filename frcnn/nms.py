@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def non_max_suppression_fast(boxes: np.ndarray, probs: np.ndarray = None, overlap_threshold: float = 0.3, max_box=300):
+def non_max_suppression(boxes: np.ndarray, probs: np.ndarray = None, overlap_threshold: float = 0.3, max_box=300):
     """
     The code is here (https://www.pyimagesearch.com/2015/02/16/faster-non-maximum-suppression-python/)
     """

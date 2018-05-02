@@ -102,33 +102,3 @@ class RegionProposalNetwork(object):
         return self.rpn_model
 
 
-def create_rpn_regression_target(gta_coord: List[int], anchor_coord: List[int]) -> Tuple[float, float, float, float]:
-    """
-    Create regression target data of region proposal network
-    :param gta_coord: ground-truth box coordinates [x_min, y_min, x_max, y_max]
-    :param anchor_coord: anchor box coordinates [x_min, y_min, x_max, y_max]
-    :return: regression target (t_x, t_y, t_w, t_h)
-    """
-    # gt_cx: the center x (the center of width) of ground-truth box (in a rescaled image)
-    # gt_cy: the center y (the center of height) of ground-truth box (in a rescaled image)
-    gt_cx = (gta_coord[0] + gta_coord[2]) / 2.
-    gt_cy = (gta_coord[1] + gta_coord[3]) / 2.
-
-    # a_cx: the center x (the center of width) of the anchor box (in a rescaled image)
-    # a_cy: the center y (the center of height) of the anchor box (in a rescaled image)
-    a_cx = (anchor_coord[0] + anchor_coord[2]) / 2.
-    a_cy = (anchor_coord[1] + anchor_coord[3]) / 2.
-
-    # a_width: the width value of the anchor
-    # a_height: the height value of the anchor
-    a_width = anchor_coord[2] - anchor_coord[0]
-    a_height = anchor_coord[3] - anchor_coord[1]
-    g_width = gta_coord[2] - gta_coord[0]
-    g_height = gta_coord[3] - gta_coord[1]
-
-    tx = (gt_cx - a_cx) / a_width
-    ty = (gt_cy - a_cy) / a_height
-    tw = np.log(g_width / a_width)
-    th = np.log(g_height / a_height)
-
-    return tx, ty, tw, th

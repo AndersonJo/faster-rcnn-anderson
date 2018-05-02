@@ -51,11 +51,17 @@ class PascalVocData(BaseData):
         self.voc_root_path = voc_root_path
         self.voc_names = voc_names
 
-    def load_data(self, limit_size: int = None, need_test: bool = True) -> Tuple[list, list, dict]:
+    def load_data(self, limit_size: int = None, need_test: bool = True, add_bg: bool = True) -> Tuple[list, list, dict]:
         """
+        Initialization method
         :param limit_size: limit the size of dataset. only use it for debug.
         :param need_test: if True it returns a list of test dataset. if not it returns an empty list.
-        Initialization method
+        :param add_bg: if True Add 'background' class as 0
+
+        :return
+            - train, test: VOC data
+            - classes: class mapping dictionary {class name: index}
+                       You can use classes variable when training detector network
         """
         # VOC data absolute paths
         # i.e. ['/data/VOCdevkit/VOC2007', '/data/VOCdevkit/VOC2012']
@@ -81,6 +87,9 @@ class PascalVocData(BaseData):
         train = list()
         test = list()
         classes = dict()
+        if add_bg:
+            classes['bg'] = 0
+
         for voc_path in self.voc_paths:
             if limit_size is not None and len(train) >= limit_size and len(test) >= limit_size:
                 break
@@ -97,8 +106,9 @@ class PascalVocData(BaseData):
                     train.append(annot)
 
                 for o in annot['objects']:
-                    classes.setdefault(o[0], 0)
-                    classes[o[0]] += 1
+                    cls_name = o[0]
+                    if cls_name not in classes:
+                        classes[cls_name] = len(classes)
 
         return train, test, classes
 

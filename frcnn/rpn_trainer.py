@@ -5,9 +5,9 @@ from typing import List, Tuple
 import cv2
 import numpy as np
 
+from frcnn.anchor import to_relative_coord
 from frcnn.config import singleton_config
 from frcnn.iou import cal_iou
-from frcnn.rpn import create_rpn_regression_target
 from frcnn.tools import cal_rescaled_size, rescale_image, cal_fen_output_size
 
 
@@ -19,15 +19,15 @@ class RPNTargetProcessor(object):
 
     def __init__(self, anchor_scales: List[int], anchor_ratios: List[float],
                  anchor_stride: List[int] = (16, 16), net_name: str = 'vgg16', rescale: bool = True,
-                 overlap_min: float = 0.3, overlap_max: float = 0.6, max_anchor: int = 256):
+                 min_overlap: float = 0.3, max_overlap: float = 0.6, max_anchor: int = 256):
         """
         :param anchor_scales: a list of anchor scales
         :param anchor_ratios: a list of anchor ratios
         :param anchor_stride: stride value used for generating anchors
         :param net_name: feature extraction model name like 'vgg-18'
         :param rescale: for enhancing the accuracy
-        :param overlap_min: determines negative anchors if the iou value is under the overlap_min
-        :param overlap_max: determines positive anchors if the iou value is over the overlap_max
+        :param min_overlap: determines negative anchors if the iou value is under the overlap_min
+        :param max_overlap: determines positive anchors if the iou value is over the overlap_max
         :param max_anchor: it limits the number of negative and positive anchors
         """
         self._rescale = rescale
@@ -35,8 +35,8 @@ class RPNTargetProcessor(object):
         self.anchor_scales = anchor_scales.copy()
         self.anchor_ratios = anchor_ratios.copy()
         self.anchor_stride = anchor_stride.copy()
-        self.overlap_min = overlap_min
-        self.overlap_max = overlap_max
+        self.min_overlap = min_overlap
+        self.max_overlap = max_overlap
         self.max_anchor = max_anchor
 
     def preprocess(self, datum: dict) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -131,8 +131,8 @@ class RPNTargetProcessor(object):
             iou = cal_iou(gta_coord, anchor_coord)
 
             # Calculate regression target
-            if iou > best_iou_for_box[idx_obj] or iou > self.overlap_max:
-                reg_target = create_rpn_regression_target(gta_coord, anchor_coord)
+            if iou > best_iou_for_box[idx_obj] or iou > self.max_overlap:
+                reg_target = to_relative_coord(gta_coord, anchor_coord)
 
             # Ground-truth bounding box should be mapped to at least one anchor box.
             # So tracking the best anchor should be implemented
@@ -147,14 +147,14 @@ class RPNTargetProcessor(object):
             z_pos = anc_scale_idx + n_ratio * anc_rat_idx
             is_valid_anchor = bool(y_valid_box[y_pos, x_pos, z_pos] == 1)
 
-            if iou > self.overlap_max:  # Positive anchors
+            if iou > self.max_overlap:  # Positive anchors
 
                 n_pos_anchor_for_box[idx_obj] += 1
                 y_valid_box[y_pos, x_pos, z_pos] = 1
                 y_cls_target[y_pos, x_pos, z_pos] = 1
                 y_regr_targets[y_pos, x_pos, z_pos: z_pos + 4] = reg_target
 
-            elif iou < self.overlap_min and not is_valid_anchor:  # Negative anchors
+            elif iou < self.min_overlap and not is_valid_anchor:  # Negative anchors
                 y_valid_box[y_pos, x_pos, z_pos] = 1
                 y_cls_target[y_pos, x_pos, z_pos] = 0
 
@@ -205,7 +205,7 @@ class RPNTargetProcessor(object):
 
     @staticmethod
     def cal_gta_coordinate(box: List[int], width: int, height: int,
-                           rescaled_width: int, rescaled_height: int) -> List[int]:
+                           rescaled_width: int, rescaled_height: int) -> np.ndarray:
         """
         The method converts coordinates to rescaled size.
         :param box: a list of coordinates [x_min, y_min, x_max, y_max]
@@ -222,11 +222,11 @@ class RPNTargetProcessor(object):
         y_min = round(box[1] * height_ratio)
         x_max = round(box[2] * width_ratio)
         y_max = round(box[3] * height_ratio)
-        return [x_min, y_min, x_max, y_max]
+        return np.array([x_min, y_min, x_max, y_max])
 
     @staticmethod
     def cal_anchor_cooridinate(x_pos: int, y_pos: int, anc_scale: int, anc_rat: List[float],
-                               stride: List[int]) -> List[int]:
+                               stride: List[int]) -> np.ndarray:
         """
         Calculates anchor coordinates on the rescaled image
         :param x_pos: x position of base network's output
@@ -243,10 +243,10 @@ class RPNTargetProcessor(object):
         y_min = round(stride[1] * y_pos - anc_height / 2)
         y_max = round(stride[1] * y_pos + anc_height / 2)
 
-        return [x_min, y_min, x_max, y_max]
+        return np.array([x_min, y_min, x_max, y_max])
 
     @staticmethod
-    def is_anchor_valid(anchor_coord: List[int], rescaled_width: int, rescaled_height: int) -> bool:
+    def is_anchor_valid(anchor_coord: np.ndarray, rescaled_width: int, rescaled_height: int) -> bool:
         """
         Check if the anchor is within the rescaled image.
         for speeding up performance, ignore anchors that are outside of the image.
@@ -275,9 +275,9 @@ class RPNTargetProcessor(object):
         cv2.rectangle(image, (x_pos * 16, y_pos * 16), (x_pos * 16 + 5, y_pos * 16 + 5), color)
 
 
-class RPNTargetGenerator(object):
+class RPNTrainer(object):
     def __init__(self, dataset: list, shuffle: bool = True, augment: bool = False):
-        super(RPNTargetGenerator, self).__init__()
+        super(RPNTrainer, self).__init__()
 
         assert len(dataset) > 0
         self._shuffle = shuffle
@@ -319,6 +319,6 @@ class RPNTargetGenerator(object):
     def create_anchor_thread() -> RPNTargetProcessor:
         config = singleton_config()
         anchor = RPNTargetProcessor(config.anchor_scales, config.anchor_ratios, config.anchor_stride,
-                                    config.net_name, config.is_rescale, config.overlap_max, config.overlap_min)
+                                    config.net_name, config.is_rescale, config.rpn_max_overlap, config.rpn_min_overlap)
 
         return anchor

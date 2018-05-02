@@ -8,7 +8,7 @@ from keras.backend.tensorflow_backend import set_session
 from frcnn.config import singleton_config, Config
 from frcnn.detector_trainer import DetectorTrainer
 from frcnn.fen import FeatureExtractionNetwork
-from frcnn.rpn_trainer import RPNTargetGenerator
+from frcnn.rpn_trainer import RPNTrainer
 from frcnn.detector import DetectionNetwork
 from frcnn.rpn import RegionProposalNetwork
 from frcnn.voc import PascalVocData
@@ -35,16 +35,16 @@ set_session(tf.Session(config=tf_config))
 def train(config: Config):
     # Load data
     vocdata = PascalVocData(config.data_path)
-    train, test, classes = vocdata.load_data(limit_size=30)
+    train, test, class_mapping = vocdata.load_data(limit_size=30, add_bg=True)
 
     # Load training tools
-    rpn_trainer = RPNTargetGenerator(train, shuffle=True, augment=True)
-    detector_trainer = DetectorTrainer()
+    rpn_trainer = RPNTrainer(train, shuffle=True, augment=True)
+    detector_trainer = DetectorTrainer(config, class_mapping)
 
     # Create Model
     fen = FeatureExtractionNetwork(basenet=config.net_name, input_shape=(None, None, 3))
     rpn = RegionProposalNetwork(fen, config.anchor_scales, config.anchor_ratios, rpn_depth=512)
-    roi = DetectionNetwork(rpn, n_class=len(classes))
+    roi = DetectionNetwork(rpn, n_class=len(class_mapping))
 
     for _ in range(10):
         # Train region proposal network
@@ -65,8 +65,8 @@ def train(config: Config):
         # print('reg_output:', reg_output.shape)
         # print('rpn.model.predict_on_batch 처리시간:', datetime.now() - now)
 
-        detector_trainer(cls_output, reg_output)
-        print('rpn_to_roi 까지 처리시간:', datetime.now() - now)
+        detector_trainer(cls_output, reg_output, datum)
+        print('_transform_rpn 까지 처리시간:', datetime.now() - now)
 
         # image = cv2.imread(datum['image_path'])
         # image = cv2.resize(image, (datum['rescaled_width'], datum['rescaled_height']))

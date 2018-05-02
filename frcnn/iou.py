@@ -2,10 +2,10 @@
 Intersection Over Union (IoU)
 """
 
-from typing import List
+import numpy as np
 
 
-def cal_iou(box1: List[int], box2: List[int]) -> float:
+def cal_iou(box1: np.array, box2: np.ndarray) -> float:
     """
     Calculate Intersection Over Union between two bounding boxes.
      * (x1, y1) : the top left point of the bounding box
@@ -19,7 +19,7 @@ def cal_iou(box1: List[int], box2: List[int]) -> float:
     return round(float(intxn_area) / float(union_area + 1e-18), 8)
 
 
-def intersection(box1: List[int], box2: List[int]):
+def intersection(box1: np.ndarray, box2: np.ndarray) -> float:
     """
     Calculate intersection between the box coordinates.
     :param box1: a list of coordinates [x_min, y_min, x_max, y_max]
@@ -35,7 +35,7 @@ def intersection(box1: List[int], box2: List[int]):
     return w * h
 
 
-def union(box1: List[int], box2: List[int], area_intersection: float = None):
+def union(box1: np.ndarray, box2: np.ndarray, area_intersection: float = None) -> float:
     """
     Calculate union between the box coordinates.
     :param box1: a list of coordinates [x_min, y_min, x_max, y_max]
