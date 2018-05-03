@@ -116,3 +116,28 @@ def to_relative_coord(gta_coord: np.ndarray, anchor_coord: np.ndarray) -> np.nda
     th = np.log(g_height / a_height)
 
     return np.array([tx, ty, tw, th])
+
+
+def to_relative_coord_np(gta_coords: np.ndarray, anchor_coords: np.ndarray):
+    """
+    The method is different from `to_relative_coord` in the respect of performance.
+    :param gta_coords: ground-truth box coordinates [[x_min, y_min, x_max, y_max], ...]
+    :param anchor_coords: anchor box coordinates [[x_min, y_min, x_max, y_max], ...]
+    :return: regression target [[t_x, t_y, t_w, t_h], ...]
+    """
+    g_w = gta_coords[:, 2] - gta_coords[:, 0]
+    g_h = gta_coords[:, 3] - gta_coords[:, 1]
+    w = anchor_coords[:, 2] - anchor_coords[:, 0]
+    h = anchor_coords[:, 3] - anchor_coords[:, 1]
+
+    g_cx = (gta_coords[:, 0] + gta_coords[:, 2]) / 2.
+    g_cy = (gta_coords[:, 1] + gta_coords[:, 3]) / 2.
+    cx = anchor_coords[:, 0] + (w / 2)  # center coordinate of width of the anchor box
+    cy = anchor_coords[:, 2] + (h / 2)  # center coordinate of height of the anchor box
+
+    tx = (g_cx - cx) / w
+    ty = (g_cy - cy) / h
+    tw = np.log(g_w / w)
+    th = np.log(g_h / h)
+
+    return np.stack([tx, ty, tw, th], axis=-1)

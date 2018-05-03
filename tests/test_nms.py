@@ -8,7 +8,7 @@ from frcnn.nms import non_max_suppression
 import numpy as np
 
 from frcnn.rpn_trainer import RPNTrainer
-from frcnn.detector import DetectionNetwork
+from frcnn.classifier import ClassifierNetwork
 from frcnn.rpn import RegionProposalNetwork
 from frcnn.voc import PascalVocData
 from tests import DATASET_ROOT_PATH
@@ -100,7 +100,7 @@ def _test_nms():
     # Create Model
     fen = FeatureExtractionNetwork(basenet='vgg16', input_shape=(None, None, 3))
     rpn = RegionProposalNetwork(fen, config.anchor_scales, config.anchor_ratios, rpn_depth=512)
-    roi = DetectionNetwork(rpn, n_class=len(classes))
+    roi = ClassifierNetwork(rpn, n_class=len(classes))
 
     # Predict
     now = datetime.now()

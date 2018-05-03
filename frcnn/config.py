@@ -44,10 +44,19 @@ class Config:
     rpn_max_overlap = 0.7
 
     ###################################
-    # Detector Network
+    # Region of Interests
     ###################################
-    detector_min_overlap = 0.1
-    detector_max_overlap = 0.7
+    # number of ROIs at once
+    n_roi = 16
+
+    # ROI pooling size
+    roi_pool_size = (7, 7)
+
+    ###################################
+    # Classifier Network
+    ###################################
+    clf_min_overlap = 0.1
+    clf_max_overlap = 0.7
 
     @property
     def n_anchor(self) -> int:

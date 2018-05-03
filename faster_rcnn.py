@@ -6,10 +6,10 @@ import tensorflow as tf
 from keras.backend.tensorflow_backend import set_session
 
 from frcnn.config import singleton_config, Config
-from frcnn.detector_trainer import DetectorTrainer
+from frcnn.classifier_trainer import ClassifierTrainer
 from frcnn.fen import FeatureExtractionNetwork
 from frcnn.rpn_trainer import RPNTrainer
-from frcnn.detector import DetectionNetwork
+from frcnn.classifier import ClassifierNetwork
 from frcnn.rpn import RegionProposalNetwork
 from frcnn.voc import PascalVocData
 
@@ -27,7 +27,7 @@ parser = parser.parse_args()
 
 # Momory Limit
 tf_config = tf.ConfigProto()
-tf_config.gpu_options.per_process_gpu_memory_fraction = 0.4
+tf_config.gpu_options.per_process_gpu_memory_fraction = 0.8
 tf_config.gpu_options.allow_growth = True
 set_session(tf.Session(config=tf_config))
 
@@ -39,23 +39,25 @@ def train(config: Config):
 
     # Load training tools
     rpn_trainer = RPNTrainer(train, shuffle=True, augment=True)
-    detector_trainer = DetectorTrainer(config, class_mapping)
+    clf_trainer = ClassifierTrainer(config, class_mapping)
 
     # Create Model
-    fen = FeatureExtractionNetwork(basenet=config.net_name, input_shape=(None, None, 3))
-    rpn = RegionProposalNetwork(fen, config.anchor_scales, config.anchor_ratios, rpn_depth=512)
-    roi = DetectionNetwork(rpn, n_class=len(class_mapping))
+    fen = FeatureExtractionNetwork(config, input_shape=(None, None, 3))
+    rpn = RegionProposalNetwork(fen, config)
+    clf = ClassifierNetwork(rpn, config, class_mapping)
 
-    for _ in range(10):
+    for _ in range(50):
         # Train region proposal network
         now = datetime.now()
-        batch_img, batch_cls, batch_regr, datum = rpn_trainer.next_batch()
+        batch_img, batch_cls, batch_regr, img_meta = rpn_trainer.next_batch()
         # print('batch_img:', batch_img.shape)
         # print('batch_cls:', batch_cls.shape)
         # print('batch_regr:', batch_regr.shape)
         # print('next batch 처리시간:', datetime.now() - now)
 
-        loss_rpn = rpn.model.train_on_batch(batch_img, [batch_cls, batch_regr])
+        rpn_cls_y, rpn_reg_y = rpn.model.predict_on_batch(batch_img)
+
+        rpn_loss = rpn.model.train_on_batch(batch_img, [batch_cls, batch_regr])
         # print('loss_rpn:', loss_rpn)
         # print('rpn.model.train_on_batch 처리시간:', datetime.now() - now)
 
@@ -65,8 +67,17 @@ def train(config: Config):
         # print('reg_output:', reg_output.shape)
         # print('rpn.model.predict_on_batch 처리시간:', datetime.now() - now)
 
-        detector_trainer(cls_output, reg_output, datum)
-        print('_transform_rpn 까지 처리시간:', datetime.now() - now)
+        anchors, probs = clf.non_maximum_suppression(cls_output, reg_output)
+        rois, cls_y, reg_y = clf_trainer.next_batch(anchors, img_meta)
+        if rois is None:
+            continue
+
+        cls_pred, reg_pred = clf.model.predict_on_batch([batch_img, rois])
+
+        clf_loss = clf.model.train_on_batch([batch_img, rois], [cls_y, reg_y])
+
+        print('rpn_loss:', rpn_loss, 'clf_loss:', clf_loss, )
+
 
         # image = cv2.imread(datum['image_path'])
         # image = cv2.resize(image, (datum['rescaled_width'], datum['rescaled_height']))

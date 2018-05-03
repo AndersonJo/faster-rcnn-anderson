@@ -79,7 +79,7 @@ class RPNTargetProcessor(object):
         # image = np.transpose(image, (2, 0, 1))
 
         # Normalize the image
-        image = image / 255.
+        image = image - 127
 
         # Expand the dimension
         image = np.expand_dims(image, axis=0)
@@ -103,7 +103,7 @@ class RPNTargetProcessor(object):
         best_reg_for_box = np.zeros((n_object, 4), dtype='float32')
         n_pos_anchor_for_box = np.zeros(n_object)
 
-        # Classifier Target Data
+        # Classification Target Data
         y_cls_target = np.zeros((output_height, output_width, n_anchor))
         y_valid_box = np.zeros((output_height, output_width, n_anchor))
         y_regr_targets = np.zeros((output_height, output_width, n_anchor * 4))
@@ -304,16 +304,16 @@ class RPNTrainer(object):
         if self._cur_idx >= self.n_data:
             self._cur_idx = 0
 
-        if self._cur_idx and self._shuffle:
+        if self._cur_idx == 0 and self._shuffle:
             perm = np.random.permutation(len(self._dataset))
             self._dataset = self._dataset[perm]
 
-        datum = self._dataset[self._cur_idx]
+        img_meta = self._dataset[self._cur_idx]
 
         self._cur_idx += 1
 
-        cls_target, reg_target, image = self.anchor.preprocess(datum)
-        return image, cls_target, reg_target, datum
+        cls_target, reg_target, image = self.anchor.preprocess(img_meta)
+        return image, cls_target, reg_target, img_meta
 
     @staticmethod
     def create_anchor_thread() -> RPNTargetProcessor:
