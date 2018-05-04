@@ -3,7 +3,9 @@ from datetime import datetime
 
 import cv2
 import tensorflow as tf
+import keras.backend as K
 from keras.backend.tensorflow_backend import set_session
+from tensorflow.python import debug as tf_debug
 
 from frcnn.config import singleton_config, Config
 from frcnn.classifier_trainer import ClassifierTrainer
@@ -25,11 +27,17 @@ parser.add_argument('--net', default='vgg16', type=str, help='base network (vgg,
 parser.add_argument('--rescale', default=True, type=bool, help='Rescale input image to lager one')
 parser = parser.parse_args()
 
-# Momory Limit
+# Momory Limit & Debugging
 tf_config = tf.ConfigProto()
 tf_config.gpu_options.per_process_gpu_memory_fraction = 0.8
 tf_config.gpu_options.allow_growth = True
-set_session(tf.Session(config=tf_config))
+
+sess = tf.Session(config=tf_config)
+sess = tf_debug.LocalCLIDebugWrapperSession(sess)
+K.set_session(sess)
+
+
+# set_session(tf.Session(config=tf_config))
 
 
 def train(config: Config):
@@ -77,7 +85,6 @@ def train(config: Config):
         clf_loss = clf.model.train_on_batch([batch_img, rois], [cls_y, reg_y])
 
         print('rpn_loss:', rpn_loss, 'clf_loss:', clf_loss, )
-
 
         # image = cv2.imread(datum['image_path'])
         # image = cv2.resize(image, (datum['rescaled_width'], datum['rescaled_height']))

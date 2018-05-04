@@ -60,10 +60,10 @@ class RegionProposalNetwork(object):
 
         rpn_losses = [self.classification_loss(self.n_anchor), self.regression_loss(self.n_anchor)]
         rpn_losses = [rpn_loss_cls(self.n_anchor), rpn_loss_regr(self.n_anchor)]
-        self.rpn_model.compile(Adam(lr=1e-5), loss=rpn_losses)
+        rpn_losses = [self.classification_loss(self.n_anchor), rpn_loss_regr(self.n_anchor)]
+        self.rpn_model.compile(Adam(lr=1e-5, name='rpn_adam'), loss=rpn_losses)
 
-    @staticmethod
-    def classification_loss(n_anchor: int):
+    def classification_loss(self, n_anchor: int):
         """
         :param n_anchor: the number of anchors
         :return: classification loss function for region proposal network
@@ -72,8 +72,9 @@ class RegionProposalNetwork(object):
         def log_loss(y_true, y_pred):
             y_true = y_true[:, :, :, :n_anchor]
 
-            cross_entorpy = y_true * K.binary_crossentropy(y_true, y_pred)
+            cross_entorpy = K.binary_crossentropy(y_true, y_pred)
             loss = K.sum(cross_entorpy)
+
             return loss
 
         return log_loss
@@ -101,6 +102,19 @@ class RegionProposalNetwork(object):
         return self.rpn_model
 
 
+def rpn_loss_cls(num_anchors):
+    epsilon = 1e-4
+
+    def rpn_loss_cls_fixed_num(y_true, y_pred):
+        y_true = y_true[:, :, :, :num_anchors]
+        crossentropy = K.binary_crossentropy(y_pred[:, :, :, :], y_true)
+        loss = 1 * K.sum(y_true * crossentropy) / K.sum(epsilon + y_true)
+
+        return loss
+
+    return rpn_loss_cls_fixed_num
+
+
 def rpn_loss_regr(num_anchors):
     epsilon = 1e-4
 
@@ -115,16 +129,3 @@ def rpn_loss_regr(num_anchors):
         return result
 
     return rpn_loss_regr_fixed_num
-
-
-def rpn_loss_cls(num_anchors):
-    epsilon = 1e-4
-
-    def rpn_loss_cls_fixed_num(y_true, y_pred):
-        y_true = y_true[:, :, :, :num_anchors]
-        crossentropy = K.binary_crossentropy(y_pred[:, :, :, :], y_true)
-        loss = 1 * K.sum(y_true * crossentropy) / K.sum(epsilon + y_true)
-
-        return loss
-
-    return rpn_loss_cls_fixed_num
