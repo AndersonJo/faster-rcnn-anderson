@@ -59,13 +59,12 @@ class RegionProposalNetwork(object):
         self.rpn_model = Model(self.fen.input_img, outputs=[self.rpn_cls, self.rpn_reg])
 
         rpn_losses = [self.classification_loss(self.n_anchor), self.regression_loss(self.n_anchor)]
-        rpn_losses = [rpn_loss_cls(self.n_anchor), rpn_loss_regr(self.n_anchor)]
-        rpn_losses = [self.classification_loss(self.n_anchor), rpn_loss_regr(self.n_anchor)]
-        self.rpn_model.compile(Adam(lr=1e-5, name='rpn_adam'), loss=rpn_losses)
+        self.rpn_model.compile(Adam(lr=1e-5), loss=rpn_losses)
 
-    def classification_loss(self, n_anchor: int):
+    def classification_loss(self, n_anchor: int, lambda_cls: float = 0.8, epsilon: float = 1e-9):
         """
         :param n_anchor: the number of anchors
+        :param epsilon: ...
         :return: classification loss function for region proposal network
         """
 
@@ -73,59 +72,35 @@ class RegionProposalNetwork(object):
             y_true = y_true[:, :, :, :n_anchor]
 
             cross_entorpy = K.binary_crossentropy(y_true, y_pred)
-            loss = K.sum(cross_entorpy)
-
-            return loss
+            loss = K.sum(y_true * cross_entorpy) / (K.sum(y_true) + epsilon)
+            return lambda_cls * loss
 
         return log_loss
 
     @staticmethod
-    def regression_loss(n_anchor: int, huber_delta: float = 1.):
+    def regression_loss(n_anchor: int, huber_delta: float = 1., lambda_reg: float = 1., normalize_w: float = 0.5,
+                        epsilon: float = 1e-9):
         """
         :param n_anchor: the number of anchors
         :param huber_delta: ....
+        :param lambda_reg: weight value of regression loss function
+        :param normalize_w: weight value of normalization
+        :param epsilon: ...
         :return: (x_center, y_center, width, height) * n_anchor
                  regression predictions for each of anchors
         """
 
         def smooth_l1(y_true, y_pred):
-            y_true = y_true[:, :, :, 4 * n_anchor:]
-            x = K.abs(y_true - y_pred)
+            reg_y = y_true[:, :, :, 4 * n_anchor:]
+            cls_y = y_true[:, :, :, :4 * n_anchor]
+
+            x = K.abs(reg_y - y_pred)
             x = K.switch(x < huber_delta, 0.5 * x ** 2, x - 0.5 * huber_delta)
-            loss = K.sum(x)
-            return loss
+            loss = K.sum(x) / (normalize_w * K.sum(cls_y) + epsilon)
+            return lambda_reg * loss
 
         return smooth_l1
 
     @property
     def model(self) -> Model:
         return self.rpn_model
-
-
-def rpn_loss_cls(num_anchors):
-    epsilon = 1e-4
-
-    def rpn_loss_cls_fixed_num(y_true, y_pred):
-        y_true = y_true[:, :, :, :num_anchors]
-        crossentropy = K.binary_crossentropy(y_pred[:, :, :, :], y_true)
-        loss = 1 * K.sum(y_true * crossentropy) / K.sum(epsilon + y_true)
-
-        return loss
-
-    return rpn_loss_cls_fixed_num
-
-
-def rpn_loss_regr(num_anchors):
-    epsilon = 1e-4
-
-    def rpn_loss_regr_fixed_num(y_true, y_pred):
-        x = y_true[:, :, :, 4 * num_anchors:] - y_pred
-        x_abs = K.abs(x)
-        x_bool = K.cast(K.less_equal(x_abs, 1.0), K.tf.float32)
-        result = K.sum(
-            y_true[:, :, :, :4 * num_anchors] * (x_bool * (0.5 * x * x) + (1 - x_bool) * (x_abs - 0.5))) / K.sum(
-            epsilon + y_true[:, :, :, :4 * num_anchors])
-
-        return result
-
-    return rpn_loss_regr_fixed_num
