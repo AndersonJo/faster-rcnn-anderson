@@ -1,18 +1,15 @@
 from argparse import ArgumentParser
 from datetime import datetime
 
-import cv2
-import tensorflow as tf
 import keras.backend as K
-from keras.backend.tensorflow_backend import set_session
-from tensorflow.python import debug as tf_debug
+import tensorflow as tf
 
-from frcnn.config import singleton_config, Config
-from frcnn.classifier_trainer import ClassifierTrainer
-from frcnn.fen import FeatureExtractionNetwork
-from frcnn.rpn_trainer import RPNTrainer
 from frcnn.classifier import ClassifierNetwork
+from frcnn.classifier_trainer import ClassifierTrainer
+from frcnn.config import singleton_config, Config
+from frcnn.fen import FeatureExtractionNetwork
 from frcnn.rpn import RegionProposalNetwork
+from frcnn.rpn_trainer import RPNTrainer
 from frcnn.voc import PascalVocData
 
 # Parser:: Basic Arguments
