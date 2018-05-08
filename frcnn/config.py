@@ -58,6 +58,11 @@ class Config:
     clf_min_overlap = 0.1
     clf_max_overlap = 0.7
 
+    ###################################
+    # Save & Load
+    ###################################
+    model_path = 'model.hdf5'
+
     @property
     def n_anchor(self) -> int:
         return len(self.anchor_ratios) * len(self.anchor_scales)

@@ -107,6 +107,7 @@ class ClassfierModel(object):
 
         self.roi_cls_output = None
         self.roi_reg_output = None
+        self.tensors = dict()
         self.roi_model = self._init_classifier()
 
     def _init_classifier(self) -> Model:
@@ -131,6 +132,10 @@ class ClassfierModel(object):
 
         self.roi_cls_output = cls_output
         self.roi_reg_output = reg_output
+
+        self.tensors['clf_roi_pooling'] = roi_pooled_output
+        self.tensors['clf_cls'] = cls_output
+        self.tensors['clf_reg'] = reg_output
 
         img_input = self.rpn.fen.input_img
         roi_model = Model([img_input, self.roi_input], [cls_output, reg_output])

@@ -9,3 +9,7 @@
 
 # Data
 temp
+
+# Model
+*.hdf5
+checkpoints
