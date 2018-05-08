@@ -1,5 +1,7 @@
+import os
 from typing import List, Tuple
 
+import cv2
 import keras.backend as K
 import numpy as np
 import tensorflow as tf
@@ -44,7 +46,7 @@ class RegionOfInterestPoolingLayer(Layer):
             - tensors[1] rois: RoI Input Tensor -> (batch, number of RoI, 4)
         :param mask: ...
         """
-        image = tensors[0]  # ex. (?, ?, ?, 512)
+        fmap = tensors[0]  # ex. (?, ?, ?, 512)
         rois = tensors[1]  # ex. (?, 32, 4)
 
         outputs = list()
@@ -63,7 +65,7 @@ class RegionOfInterestPoolingLayer(Layer):
             h = K.cast(h, 'int32')
 
             # (None, 7 pool_height, 7 pool_width, 512 n_features)
-            resized = tf.image.resize_images(image[:, y:y + h, x:x + w, :], (self.pool_height, self.pool_width))
+            resized = tf.image.resize_images(fmap[:, y:y + h, x:x + w, :], (self.pool_height, self.pool_width))
             outputs.append(resized)
 
         final_output = K.concatenate(outputs, axis=0)
@@ -142,11 +144,14 @@ class ClassfierModel(object):
         def smooth_l1(y_true, y_pred):
             # y_true consists of two parts; labels and regressions
             # we uses only regression part
-            y_true = y_true[:, :, 4 * num_classes:]
+            reg_y = y_true[:, :, 4 * num_classes:]
 
-            x = K.abs(y_true - y_pred)
+            cond = tf.equal(reg_y, tf.constant(0.))
+            cls_y = tf.where(cond, tf.zeros_like(reg_y), tf.ones_like(reg_y))
+
+            x = K.abs(reg_y - y_pred)
             x = K.switch(x < huber_delta, 0.5 * x ** 2, x - 0.5 * huber_delta)
-            loss = K.sum(x)
+            loss = K.sum(x) / (K.sum(cls_y) + epsilon)
 
             return loss
 
@@ -168,7 +173,7 @@ class ClassifierNetwork(ClassfierModel):
         """
         :param rpn_cls_output: (batch, fh, fw, 9)
         :param rpn_reg_output: (batch, fh, fw, 36) and each regression is (tx, ty, tw, th)
-        :param overlap_threshold : overlap threshold used for Non Max Suppression
+        :param overlap_threshold : used for Non Max Suppression
         :return
             - anchors: anchors picked by NMS. (None, (x, y, w, h))
             - probs: classification probability vector (is it object or not?)
@@ -256,3 +261,32 @@ class ClassifierNetwork(ClassfierModel):
         probs = np.delete(probs, idxs, 0)
 
         return anchors, probs
+
+    def debug_nms_images(self, anchors: np.ndarray, img_meta: dict):
+        image = cv2.imread(img_meta['image_path'])
+        image = cv2.resize(image, (img_meta['rescaled_width'], img_meta['rescaled_height']))
+
+        ratio_x = img_meta['rescaled_width'] / img_meta['width']
+        ratio_y = img_meta['rescaled_height'] / img_meta['height']
+
+        for anchor in anchors:
+            min_x = anchor[0] * 16
+            min_y = anchor[1] * 16
+            max_x = anchor[2] * 16 + min_x
+            max_y = anchor[3] * 16 + min_y
+            cx = (min_x + max_x) // 2
+            cy = (min_y + max_y) // 2
+            cv2.rectangle(image, (cx, cy), (cx + 5, cy + 5), (0, 0, 255))
+
+        for obj in img_meta['objects']:
+            min_x, min_y, max_x, max_y = obj[1:]
+            min_x = int(min_x * ratio_x)
+            max_x = int(max_x * ratio_x)
+            min_y = int(min_y * ratio_y)
+            max_y = int(max_y * ratio_y)
+
+            cx = (min_x + max_x) // 2
+            cy = (min_y + max_y) // 2
+            cv2.rectangle(image, (cx, cy), (cx + 5, cy + 5), (255, 255, 0))
+
+        cv2.imwrite(os.path.join('temp', img_meta['filename']), image)

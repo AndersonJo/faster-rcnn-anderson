@@ -32,7 +32,7 @@ class RegionProposalNetwork(object):
         self.rpn_cls = None
         self.rpn_reg = None
         self.rpn_model = None
-        self.rpn_tensors = dict()
+        self.tensors = dict()
         self._init_rpn(config.rpn_depth)
 
     def _init_rpn(self, rpn_depth: int):
@@ -56,9 +56,9 @@ class RegionProposalNetwork(object):
         regression = Conv2D(self.n_anchor * 4, kernel_size=(1, 1), activation='linear',
                             kernel_initializer='zero', name='rpn_regression')(intermediate_layer)
 
-        self.rpn_tensors['rpn_intm'] = intermediate_layer
-        self.rpn_tensors['rpn_cls'] = classification
-        self.rpn_tensors['rpn_reg'] = regression
+        self.tensors['rpn_intm'] = intermediate_layer
+        self.tensors['rpn_cls'] = classification
+        self.tensors['rpn_reg'] = regression
 
         self.rpn_layer = intermediate_layer
         self.rpn_cls = classification
@@ -80,6 +80,11 @@ class RegionProposalNetwork(object):
 
             cross_entorpy = K.binary_crossentropy(y_true, y_pred)
             loss = K.sum(y_true * cross_entorpy) / (K.sum(y_true) + epsilon)
+
+            self.tensors['cls_y_true'] = y_true
+            self.tensors['cls_y_pred'] = y_pred
+            self.tensors['cls_cross_entorpy'] = cross_entorpy
+            self.tensors['cls_loss'] = loss
             return lambda_cls * loss
 
         return log_loss
@@ -104,21 +109,21 @@ class RegionProposalNetwork(object):
             # cls_y = K.print_tensor(cls_y, 'cls_y')
             # cls_y = tf.Print(cls_y, [cls_y], 'cls_y', first_n=100)
 
-            cls_y2 = y_true[:, :, :, :4 * n_anchor]
+            # cls_y2 = y_true[:, :, :, :4 * n_anchor]
 
             h1 = K.abs(reg_y - y_pred)
             h2 = K.switch(h1 < huber_delta, 0.5 * h1 ** 2, h1 - 0.5 * huber_delta)
             loss = K.sum(h2) / (normalize_w * K.sum(cls_y) + epsilon)
 
-            self.rpn_tensors['reg_y_true'] = y_true
-            self.rpn_tensors['reg_y_pred'] = y_pred
-            self.rpn_tensors['reg_reg_y'] = reg_y
-            self.rpn_tensors['reg_cond'] = cond
-            self.rpn_tensors['reg_cls_y'] = cls_y
-            self.rpn_tensors['reg_cls_y2'] = cls_y2
-            self.rpn_tensors['reg_h1'] = h1
-            self.rpn_tensors['reg_h2'] = h2
-            self.rpn_tensors['reg_loss'] = loss
+            self.tensors['reg_y_true'] = y_true
+            self.tensors['reg_y_pred'] = y_pred
+            self.tensors['reg_reg_y'] = reg_y
+            self.tensors['reg_cond'] = cond
+            self.tensors['reg_cls_y'] = cls_y
+            # self.tensors['reg_cls_y2'] = cls_y2
+            self.tensors['reg_h1'] = h1
+            self.tensors['reg_h2'] = h2
+            self.tensors['reg_loss'] = loss
 
             return lambda_reg * loss
 
@@ -127,4 +132,3 @@ class RegionProposalNetwork(object):
     @property
     def model(self) -> Model:
         return self.rpn_model
-

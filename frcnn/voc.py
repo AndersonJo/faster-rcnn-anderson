@@ -61,7 +61,7 @@ class PascalVocData(BaseData):
         :return
             - train, test: VOC data
             - classes: class mapping dictionary {class name: index}
-                       You can use classes variable when training detector network
+                       You can use classes variable when training classifier network
         """
         # VOC data absolute paths
         # i.e. ['/data/VOCdevkit/VOC2007', '/data/VOCdevkit/VOC2012']

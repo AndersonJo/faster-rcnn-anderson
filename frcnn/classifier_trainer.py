@@ -1,3 +1,6 @@
+import os
+
+import cv2
 import math
 from typing import Tuple, List, Union
 
@@ -22,8 +25,8 @@ class ClassifierTrainer(object):
         self.n_class = len(class_mapping)
         self.n_roi = config.n_roi
 
-    def next_batch(self, anchors: np.ndarray, image_data: dict) -> Union[Tuple[np.ndarray, np.ndarray, np.ndarray],
-                                                                         Tuple[None, None, None]]:
+    def next_batch(self, anchors: np.ndarray, image_data: dict, debug_image=False) -> Union[
+        Tuple[np.ndarray, np.ndarray, np.ndarray], Tuple[None, None, None]]:
         """
         :param anchors: (None, (x, y, w, h))
         :param image_data: a dictionary of image meta data
@@ -35,18 +38,22 @@ class ClassifierTrainer(object):
         gt_anchors, classes = ground_truth_anchors(image_data, subsampling_stride=self.anchor_stride)
 
         # Create target dataset for Classifier
-        rois, cls_y, reg_y = self._generate_train_data(anchors, gt_anchors, classes)
-        picked_indices = self._pick(cls_y)
+        rois, cls_y, reg_y, loc_obj, loc_bg = self._generate_train_data(anchors, gt_anchors, classes)
+        picked_indices, pos_indices, neg_indices = self._pick(cls_y)
 
         if picked_indices is None:
             return None, None, None
 
+        if debug_image:
+            self._debug_images(rois, pos_indices, neg_indices, image_data)
+
         rois = rois[:, picked_indices, :]
         cls_y = cls_y[:, picked_indices, :]
         reg_y = reg_y[:, picked_indices, :]
+
         return rois, cls_y, reg_y
 
-    def _pick(self, cls_y: np.ndarray) -> Union[None, np.ndarray]:
+    def _pick(self, cls_y: np.ndarray) -> Union[Tuple[None, None, None], Tuple[np.ndarray, np.ndarray, np.ndarray]]:
         """
         :return: selected indices
         """
@@ -56,7 +63,7 @@ class ClassifierTrainer(object):
         pos_indices = np.where(cls_y[0, :, bg_idx] == 0)[0]
 
         if not len(pos_indices) or not len(neg_indices):
-            return None
+            return None, None, None
 
         try:
             # replace=False means it does not allow duplicate choices
@@ -73,16 +80,19 @@ class ClassifierTrainer(object):
             pos_indices = np.concatenate([pos_indices, _p_indices], axis=0)
 
         picked_indices = np.concatenate([pos_indices, neg_indices], axis=0)
-        return picked_indices
+        return picked_indices, pos_indices, neg_indices
 
     def _generate_train_data(self, anchors: np.ndarray, gt_anchors: np.ndarray, gt_classes: List[str]) -> Tuple[
-        np.ndarray, np.ndarray, np.ndarray]:
+        np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
-        Generate training data for Detector Network
+        Generate training data for Classifier Network
         :param anchors: picked anchors passed by Non Maximum Suppression (min_x, min_y, max_x, max_y)
         :param gt_anchors: ground-truth anchors (min_x, min_y, max_x, max_y)
         :param gt_classes: list of ground-truth class names -> ['tvmonitor', 'person']
         :return:
+            - rois: Region of Interest over anchors. (1, None, (min_x, min_y, w, h))
+            - cls_y: one-hot vectors over anchors (ex. [[1, 0, 0, ...], [0, 1, 0, ...], ...]). (1, None 21)
+            - reg_y:
         """
         # Calculate IoUs
         n_gta = len(gt_anchors)
@@ -164,4 +174,40 @@ class ClassifierTrainer(object):
         cls_y = np.expand_dims(cls_y, axis=0)
         reg_y = np.expand_dims(reg_y, axis=0)
 
-        return rois, cls_y, reg_y
+        return rois, cls_y, reg_y, loc_obj, loc_bg
+
+    def _debug_images(self, rois, loc_obj, loc_bg, img_meta):
+        image = cv2.imread(img_meta['image_path'])
+        image = cv2.resize(image, (img_meta['rescaled_width'], img_meta['rescaled_height']))
+
+        ratio_x = img_meta['rescaled_width'] / img_meta['width']
+        ratio_y = img_meta['rescaled_height'] / img_meta['height']
+
+        for roi in rois[0, loc_obj]:
+            self._rectangle(image, roi, color=(255, 255, 0), thickness=3)
+
+        for roi in rois[0, loc_bg]:
+            self._rectangle(image, roi, color=(200, 200, 200), thickness=2)
+
+        for obj in img_meta['objects']:
+            min_x, min_y, max_x, max_y = obj[1:]
+            min_x = int(min_x * ratio_x)
+            max_x = int(max_x * ratio_x)
+            min_y = int(min_y * ratio_y)
+            max_y = int(max_y * ratio_y)
+
+            cx = (min_x + max_x) // 2
+            cy = (min_y + max_y) // 2
+            cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (0, 0, 255), thickness=1)
+
+        cv2.imwrite(os.path.join('temp', img_meta['filename']), image)
+
+    def _rectangle(self, image, roi, color: Tuple[int, int, int] = (0, 0, 255), thickness=1):
+        min_x = roi[0] * 16
+        min_y = roi[1] * 16
+        max_x = roi[2] * 16 + min_x
+        max_y = roi[3] * 16 + min_y
+
+        cx = (min_x + max_x) // 2
+        cy = (min_y + max_y) // 2
+        cv2.rectangle(image, (cx - 5, cy - 5), (cx + 5, cy + 5), color, thickness=thickness)

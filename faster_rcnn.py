@@ -52,44 +52,26 @@ def train(config: Config):
     clf = ClassifierNetwork(rpn, config, class_mapping)
 
     for _ in range(50):
-        # Train region proposal network
         now = datetime.now()
+
+        # Train Region Proposal Network
         batch_img, batch_cls, batch_regr, img_meta = rpn_trainer.next_batch()
-        # print('batch_img:', batch_img.shape)
-        # print('batch_cls:', batch_cls.shape)
-        # print('batch_regr:', batch_regr.shape)
-        # print('next batch 처리시간:', datetime.now() - now)
-
-        rpn_cls_y, rpn_reg_y = rpn.model.predict_on_batch(batch_img)
-
         rpn_loss = rpn.model.train_on_batch(batch_img, [batch_cls, batch_regr])
-        # print('loss_rpn:', loss_rpn)
-        # print('rpn.model.train_on_batch 처리시간:', datetime.now() - now)
 
+        # Train Classifier Network
         cls_output, reg_output = rpn.model.predict_on_batch(batch_img)
-
-        # print('cls_output:', cls_output.shape)
-        # print('reg_output:', reg_output.shape)
-        # print('rpn.model.predict_on_batch 처리시간:', datetime.now() - now)
-
         anchors, probs = clf.non_maximum_suppression(cls_output, reg_output)
+        # clf.debug_nms_images(anchors, img_meta)
         rois, cls_y, reg_y = clf_trainer.next_batch(anchors, img_meta)
+
         if rois is None:
             continue
 
-        cls_pred, reg_pred = clf.model.predict_on_batch([batch_img, rois])
-
         clf_loss = clf.model.train_on_batch([batch_img, rois], [cls_y, reg_y])
+        
+        # cls_pred, reg_pred = clf.model.predict_on_batch([batch_img, rois])
 
         print('rpn_loss:', rpn_loss, 'clf_loss:', clf_loss, )
-
-        # image = cv2.imread(datum['image_path'])
-        # image = cv2.resize(image, (datum['rescaled_width'], datum['rescaled_height']))
-        #
-        # for i in range(nms_anchors.shape[0]):
-        #     anc = nms_anchors[i] * 16
-        #     cv2.rectangle(image, (anc[0], anc[1]), (anc[0] + 5, anc[1] + 5), (0, 0, 255))
-        # cv2.imwrite(datum['filename'], image)
 
 
 if __name__ == '__main__':
