@@ -1,7 +1,5 @@
-import math
-from typing import List, Tuple
-import numpy as np
 import keras.backend as K
+import tensorflow as tf
 from keras import Model
 from keras.layers import Conv2D
 from keras.optimizers import Adam
@@ -9,12 +7,10 @@ from keras.optimizers import Adam
 from frcnn.config import Config
 from frcnn.fen import FeatureExtractionNetwork
 
-import tensorflow as tf
-
 
 class RegionProposalNetwork(object):
 
-    def __init__(self, fen: FeatureExtractionNetwork, config: Config):
+    def __init__(self, fen: FeatureExtractionNetwork, config: Config, train: bool = False):
         """
         # Region Proposal Network
         :param n_anchor: the number of anchors (usually 9)
@@ -33,9 +29,9 @@ class RegionProposalNetwork(object):
         self.rpn_reg = None
         self.rpn_model = None
         self.tensors = dict()
-        self._init_rpn(config.rpn_depth)
+        self._init_rpn(config.rpn_depth, train)
 
-    def _init_rpn(self, rpn_depth: int):
+    def _init_rpn(self, rpn_depth: int, train: bool = False):
         """
         This method initializes Region Proposal Network after base network (i.e. VGG16)
         :param rpn_depth:
@@ -63,10 +59,13 @@ class RegionProposalNetwork(object):
         self.rpn_layer = intermediate_layer
         self.rpn_cls = classification
         self.rpn_reg = regression
-        self.rpn_model = Model(self.fen.input_img, outputs=[self.rpn_cls, self.rpn_reg])
 
-        rpn_losses = [self.classification_loss(self.n_anchor), self.regression_loss(self.n_anchor)]
-        self.rpn_model.compile(Adam(lr=1e-5), loss=rpn_losses)
+        if train:
+            self.rpn_model = Model(self.fen.image_input, outputs=[self.rpn_cls, self.rpn_reg])
+            rpn_losses = [self.classification_loss(self.n_anchor), self.regression_loss(self.n_anchor)]
+            self.rpn_model.compile(Adam(lr=1e-5), loss=rpn_losses)
+        else:
+            self.rpn_model = Model(self.fen.image_input, outputs=[self.rpn_cls, self.rpn_reg, self.fen.output])
 
     def classification_loss(self, n_anchor: int, lambda_cls: float = 0.8, epsilon: float = 1e-9):
         """

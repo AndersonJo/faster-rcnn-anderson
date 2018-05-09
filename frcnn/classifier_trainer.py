@@ -146,11 +146,12 @@ class ClassifierTrainer(object):
         #   if class_obj_indices = [1]
         #   - coords: [[0, 0, 0, 0, tx, ty, tw, th, 0, 0, ...], ...]
         #   - labels: [[0, 0, 0, 0,  1,  1,  1,  1, 0, 0, ...], ...]
+        #
         #   if class_obj_indices = [2]
         #   - coords: [[0, 0, 0, 0, 0, 0, 0, 0, tx, ty, tw, th, 0, 0, ...], ...]
         #   - labels: [[0, 0, 0, 0, 0, 0, 0, 0,  1,  1,  1,  1, 0, 0, ...], ...]
         ################################################################################
-        coords = np.zeros((n_ious, 4 * self.n_class))
+        coords = np.zeros((n_ious, 4 * self.n_class))  # -1 : exclude background class
         labels = np.zeros((n_ious, 4 * self.n_class))
 
         if n_obj and class_obj_indices is not None:
@@ -166,6 +167,10 @@ class ClassifierTrainer(object):
         coords[:, 1] *= 8.
         coords[:, 2] *= 4.
         coords[:, 3] *= 4.
+
+        # Exclude the background class. In this case, bg is 0
+        coords = coords[:, 4:]
+        labels = labels[:, 4:]
 
         # Classifer Model only uses coords part.
         reg_y = np.concatenate([labels, coords], axis=1)

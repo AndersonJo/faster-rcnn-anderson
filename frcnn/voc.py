@@ -110,6 +110,8 @@ class PascalVocData(BaseData):
                     if cls_name not in classes:
                         classes[cls_name] = len(classes)
 
+        assert 0 == classes['bg']
+        
         return train, test, classes
 
     @staticmethod

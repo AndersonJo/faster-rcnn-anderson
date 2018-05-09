@@ -16,7 +16,7 @@ class FeatureExtractionNetwork(object):
         :param input_shape: input_shape
         """
         # Initialize input image tensor
-        self.input_img = Input(shape=input_shape, name='fen_input_image')
+        self.image_input = Input(shape=input_shape, name='fen_input_image')
 
         # Initialize feature extraction network
         self.base_name = config.net_name.lower().strip()  # name of Base Network (FEN)
@@ -36,21 +36,21 @@ class FeatureExtractionNetwork(object):
         model = None
         last_tensor = None
         if self.base_name == 'vgg16':
-            model = VGG16(include_top=False, input_tensor=self.input_img)
-            model = Model(self.input_img, model.layers[-2].output)
+            model = VGG16(include_top=False, input_tensor=self.image_input)
+            model = Model(self.image_input, model.layers[-2].output)
             last_tensor = model.layers[-1].output
 
         elif self.base_name == 'vgg19':
-            model = VGG19(include_top=False, input_tensor=self.input_img)
-            model = Model(self.input_img, model.layers[-2].output)
+            model = VGG19(include_top=False, input_tensor=self.image_input)
+            model = Model(self.image_input, model.layers[-2].output)
             last_tensor = model.layers[-1].output
 
         elif self.base_name == 'resnet50':
-            model = ResNet50(include_top=False, input_tensor=self.input_img)
-            model = Model(self.input_img, model.layers[-2].output)
+            model = ResNet50(include_top=False, input_tensor=self.image_input)
+            model = Model(self.image_input, model.layers[-2].output)
             last_tensor = model.layers[-1].output
         elif self.base_name == 'inception_v3':
-            model = InceptionV3(include_top=False, input_tensor=self.input_img)
+            model = InceptionV3(include_top=False, input_tensor=self.image_input)
             last_tensor = model.layers[-1].output
 
         self.model = model

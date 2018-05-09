@@ -39,7 +39,7 @@ class RPNTargetProcessor(object):
         self.max_overlap = max_overlap
         self.max_anchor = max_anchor
 
-    def preprocess(self, datum: dict) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def process_image(self, datum: dict) -> np.ndarray:
         """
         The method pre-processes just a single datum (not batch data)
         :param datum: single data point (i.e. VOC Data)
@@ -60,11 +60,11 @@ class RPNTargetProcessor(object):
 
         datum['rescaled_width'] = rescaled_width
         datum['rescaled_height'] = rescaled_height
-        cls_target, regr_target = self.generate_rpn_target(datum, image)
+        # cls_target, regr_target = self.generate_rpn_target(datum, image)
 
         # Post Processing the Image
         image = self.postprocess_image(image)
-        return cls_target, regr_target, image
+        return image
 
     def postprocess_image(self, image: np.ndarray) -> np.ndarray:
         """
@@ -85,7 +85,7 @@ class RPNTargetProcessor(object):
         image = np.expand_dims(image, axis=0)
         return image
 
-    def generate_rpn_target(self, datum: dict, image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def generate_rpn_target(self, datum: dict, image: np.ndarray = None) -> Tuple[np.ndarray, np.ndarray]:
         width = datum['width']
         height = datum['height']
         rescaled_width = datum['rescaled_width']
@@ -312,8 +312,12 @@ class RPNTrainer(object):
 
         self._cur_idx += 1
 
-        cls_target, reg_target, image = self.anchor.preprocess(img_meta)
+        image = self.anchor.process_image(img_meta)
+        cls_target, reg_target, = self.anchor.generate_rpn_target(img_meta)
         return image, cls_target, reg_target, img_meta
+
+    def count(self):
+        return len(self._dataset)
 
     @staticmethod
     def create_anchor_thread() -> RPNTargetProcessor:
@@ -322,3 +326,24 @@ class RPNTrainer(object):
                                     config.net_name, config.is_rescale, config.rpn_max_overlap, config.rpn_min_overlap)
 
         return anchor
+
+
+class RPNDataProcessor(RPNTrainer):
+    """
+    Use this class for inference phase. If you want to train a model, use RPNTrainer class.
+    """
+
+    def next_batch(self) -> Tuple[np.ndarray, dict]:
+        if self._cur_idx >= self.n_data:
+            self._cur_idx = 0
+
+        if self._cur_idx == 0 and self._shuffle:
+            perm = np.random.permutation(len(self._dataset))
+            self._dataset = self._dataset[perm]
+
+        img_meta = self._dataset[self._cur_idx]
+
+        self._cur_idx += 1
+
+        image = self.anchor.process_image(img_meta)
+        return image, img_meta
