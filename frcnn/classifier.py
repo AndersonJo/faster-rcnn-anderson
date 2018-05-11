@@ -60,8 +60,13 @@ class RegionOfInterestPoolingLayer(Layer):
             h = K.cast(h, 'int32')
 
             # (None, 7 pool_height, 7 pool_width, 512 n_features)
-            resized = tf.image.resize_images(fmap[:, y:y + h, x:x + w, :], (self.pool_height, self.pool_width))
-            outputs.append(resized)
+            try:
+                resized = tf.image.resize_images(fmap[:, y:y + h, x:x + w, :], (self.pool_height, self.pool_width))
+                outputs.append(resized)
+            except Exception as e:
+                print(e)
+                import ipdb
+                ipdb.set_trace()
 
         final_output = K.concatenate(outputs, axis=0)
         final_output = K.reshape(final_output, (1, self.n_roi, self.pool_height, self.pool_width, self.n_channel))

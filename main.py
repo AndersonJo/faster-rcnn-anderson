@@ -45,10 +45,11 @@ def train_voc(config: Config, train: list, class_mapping: dict):
     # Create Model
     frcnn = FRCNN(config, class_mapping, train=True)
 
-    progbar = Progbar(1000)
+    # Progress Bar
+    progbar = Progbar(len(train))
 
     best_loss = np.inf
-    for step in range(5000000):
+    for step in range(len(train)):
         batch_images, batch_cls, batch_regr, img_meta = rpn_trainer.next_batch()
 
         # Train Region Proposal Network
@@ -69,17 +70,20 @@ def train_voc(config: Config, train: list, class_mapping: dict):
 
         # Update Visualization
         total_loss = rpn_loss[0] + clf_loss[0]
+
         _saved = False
-        if total_loss < best_loss and step > 20:
+        if total_loss < best_loss and step > 1000:
             best_loss = total_loss
-            filename = 'checkpoints/model_{0}_{1}.hdf5'.format(step, round(total_loss, 4))
+            filename = 'checkpoints/model_{0}_{1:.4}.hdf5'.format(step, round(total_loss, 4))
             frcnn.save(filename)
             _saved = True
 
             # print('Saved! best_rpn:{0} best_clf:{1}'.format(rpn_loss, clf_loss))
 
         progbar.update(step, [('rpn', rpn_loss[0]),
-                              ('clf', clf_loss[0])])
+                              ('clf', clf_loss[0]),
+                              ('clf_c', clf_loss[1]),
+                              ('clf_r', clf_loss[2])])
 
 
 def test_voc(config: Config, test: list, class_mapping: dict):
@@ -88,7 +92,7 @@ def test_voc(config: Config, test: list, class_mapping: dict):
 
     # Create Model
     frcnn = FRCNN(config, class_mapping)
-    frcnn.load('checkpoints/model_6115_0.17835207283496857_0.5760370492935181.hdf5')
+    frcnn.load('checkpoints/model_33758_0.11919999867677689.hdf5')
 
     # Inference
     for step in range(rpn_data.count()):
@@ -97,10 +101,17 @@ def test_voc(config: Config, test: list, class_mapping: dict):
         rpn_cls, rpn_reg, f_maps = frcnn.rpn_model.predict_on_batch(batch_image)
         anchors, probs = frcnn.generate_anchors(rpn_cls, rpn_reg)
 
+        cls_ys = list()
+        reg_ys = list()
         for rois in frcnn.iter_rois(anchors):
             cls_y, reg_y = frcnn.clf_model.predict_on_batch([batch_image, rois])
+            cls_ys.append(cls_y)
+            reg_ys.append(reg_y)
 
-        break
+        import ipdb
+        ipdb.set_trace()
+        #     print(cls_y.shape, reg_y.shape)
+        # print(step)
 
 
 def main(config: Config):
