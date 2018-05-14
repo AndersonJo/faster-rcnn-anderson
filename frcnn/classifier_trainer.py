@@ -20,6 +20,7 @@ class ClassifierTrainer(object):
 
         self.min_overlap = config.clf_min_overlap
         self.max_overlap = config.clf_max_overlap
+        self.regr_std = config.clf_regr_std
 
         self.class_mapping = class_mapping
         self.n_class = len(class_mapping)
@@ -163,14 +164,14 @@ class ClassifierTrainer(object):
             coords[loc_obj, _loc_v.T] = relative_t.T
             labels[loc_obj, _loc_v.T] = 1
 
-        coords[:, 0] *= 8.
-        coords[:, 1] *= 8.
-        coords[:, 2] *= 4.
-        coords[:, 3] *= 4.
+        coords[:, 0] *= self.regr_std[0]
+        coords[:, 1] *= self.regr_std[1]
+        coords[:, 2] *= self.regr_std[2]
+        coords[:, 3] *= self.regr_std[3]
 
-        # Exclude the background class. In this case, bg is 0
-        coords = coords[:, 4:]
-        labels = labels[:, 4:]
+        # Exclude the background class. In this case, bg is the last one
+        coords = coords[:, :-4]
+        labels = labels[:, :-4]
 
         # Classifer Model only uses coords part.
         reg_y = np.concatenate([labels, coords], axis=1)

@@ -87,8 +87,6 @@ class PascalVocData(BaseData):
         train = list()
         test = list()
         classes = dict()
-        if add_bg:
-            classes['bg'] = 0
 
         for voc_path in self.voc_paths:
             if limit_size is not None and len(train) >= limit_size and len(test) >= limit_size:
@@ -110,8 +108,9 @@ class PascalVocData(BaseData):
                     if cls_name not in classes:
                         classes[cls_name] = len(classes)
 
-        assert 0 == classes['bg']
-        
+        if add_bg:
+            classes['bg'] = len(classes)
+
         return train, test, classes
 
     @staticmethod

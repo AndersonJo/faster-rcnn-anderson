@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 from keras import Model
 
-from frcnn.anchor import to_absolute_coord
+from frcnn.anchor import to_absolute_coord, apply_regression_to_roi
 from frcnn.classifier import ClassifierNetwork
 from frcnn.config import Config
 from frcnn.fen import FeatureExtractionNetwork
@@ -22,6 +22,8 @@ class FRCNN(object):
         self.fen = fen
         self.rpn = rpn
         self.clf = clf
+
+        self._clf_reg_std = config.clf_regr_std
 
         # Initialize ModelAll
         self._model_path = config.model_path
@@ -152,7 +154,48 @@ class FRCNN(object):
 
         return anchors, probs
 
-    def iter_rois(self, anchors):
+    def clf_predict(self, batch_image: np.ndarray, anchors: np.ndarray, clf_threshold: float = 0.7):
+        """
+        :param batch_image: (1, h, w, 3) image
+        :param anchors: (None, (min_x, min_y, max_x, max_y))
+        :param clf_threshold: exclude predicted output which have lower probabilities than clf_threshold
+        :return:
+        """
+        cls_pred = list()
+        reg_pred = list()
+        rois = list()
+        for roi in self._iter_rois(anchors):
+            cls_p, reg_p = self.clf_model.predict_on_batch([batch_image, roi])
+            cls_pred.append(cls_p)
+            reg_pred.append(reg_p)
+            rois.append(roi)
+
+        cls_pred = np.concatenate(cls_pred, axis=1)
+        reg_pred = np.concatenate(reg_pred, axis=1)
+        rois = np.concatenate(rois, axis=1)
+
+        # Exclude background classfication output and the ones which have low probabilities.
+        _bg = self.clf.class_mapping['bg']
+        mask = (np.max(cls_pred, axis=2) > clf_threshold) & (np.argmax(cls_pred, axis=2) != _bg)
+
+        cls_pred = cls_pred[mask]  # (None, n_class) with background
+        reg_pred = reg_pred[mask]  # (None, (n_class-1) * 4)
+        rois = rois[mask]
+
+        # Get regressions as
+        cls_indices = np.argmax(cls_pred, axis=1).reshape(-1)
+        regs = np.zeros((len(cls_indices), 4), dtype=np.float32)
+        for i, cls_idx in enumerate(cls_indices):
+            regs[i] = reg_pred[i, cls_idx: cls_idx + 4]  # regs <- (tx, ty, th, tw)
+
+        regs[:, 0] /= self._clf_reg_std[0]
+        regs[:, 1] /= self._clf_reg_std[1]
+        regs[:, 2] /= self._clf_reg_std[2]
+        regs[:, 3] /= self._clf_reg_std[3]
+
+        gta_pred = apply_regression_to_roi(regs, rois)
+
+    def _iter_rois(self, anchors):
         """
         :param anchors: anchors filtered by NMS. (None, (min_x, min_y, max_x, max_y))
         :return rois (1, None, (min_x, min_y, w, h))

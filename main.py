@@ -87,6 +87,8 @@ def train_voc(config: Config, train: list, class_mapping: dict):
 
 
 def test_voc(config: Config, test: list, class_mapping: dict):
+    class_mapping_inv = {v: k for k, v in class_mapping.items()}
+
     # Load data tools
     rpn_data = RPNDataProcessor(test, shuffle=False, augment=False)
 
@@ -101,15 +103,8 @@ def test_voc(config: Config, test: list, class_mapping: dict):
         rpn_cls, rpn_reg, f_maps = frcnn.rpn_model.predict_on_batch(batch_image)
         anchors, probs = frcnn.generate_anchors(rpn_cls, rpn_reg)
 
-        cls_ys = list()
-        reg_ys = list()
-        for rois in frcnn.iter_rois(anchors):
-            cls_y, reg_y = frcnn.clf_model.predict_on_batch([batch_image, rois])
-            cls_ys.append(cls_y)
-            reg_ys.append(reg_y)
+        frcnn.clf_predict(batch_image, anchors)
 
-        import ipdb
-        ipdb.set_trace()
         #     print(cls_y.shape, reg_y.shape)
         # print(step)
 

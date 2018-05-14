@@ -141,3 +141,26 @@ def to_relative_coord_np(gta_coords: np.ndarray, anchor_coords: np.ndarray):
     th = np.log(g_h / h)
 
     return np.stack([tx, ty, tw, th], axis=-1)
+
+
+def apply_regression_to_roi(regs: np.ndarray, rois: np.ndarray):
+    """
+    Apply predicted regression output to rois
+    :param regs: batch of (tx, ty, tw, th) .. predicted regressions
+    :param rois: batch of (x, y, w, h) .. basically this is anchors gone through NMS.
+    :return: batch of (g_x, g_y, g_w, g_h)
+    """
+    cx = rois[:, 0] + rois[:, 2] / 2  # x_a + w_a/2 = cx_a
+    cy = rois[:, 1] + rois[:, 3] / 2  # y_a + h_a/2 = cy_a
+
+    g_cx = regs[:, 0] * rois[:, 2] + cx  # tx * w_a + cx_a
+    g_cy = regs[:, 1] * rois[:, 3] + cy  # ty * h_a + cy_a
+    g_w = np.exp(regs[:, 2]) * rois[:, 2]  # exp(tw) * w_a
+    g_h = np.exp(regs[:, 3]) * rois[:, 3]  # exp(th) * h_a
+
+    g_cx = np.round(g_cx).astype('int')
+    g_cy = np.round(g_cy).astype('int')
+    g_w = np.round(g_w).astype('int')
+    g_h = np.round(g_h).astype('int')
+
+    return np.stack([g_cx, g_cy, g_w, g_h], axis=-1)
