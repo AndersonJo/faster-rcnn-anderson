@@ -1,10 +1,10 @@
-from typing import Tuple, List
+from typing import Tuple
 
 import cv2
 import numpy as np
 
 
-def cal_rescaled_size(width: int, height: int, min_side: int = 600) -> Tuple[int, int]:
+def cal_rescaled_size(width: int, height: int, min_side: int = 600) -> Tuple[int, int, float]:
     """
     Calculates rescaled image size; which an side of the rectangle is longer than or equal to min_size
     :param width: image width
@@ -13,16 +13,17 @@ def cal_rescaled_size(width: int, height: int, min_side: int = 600) -> Tuple[int
     :return: (width, height)
     """
 
-    def _rescale(small: int, big: int) -> Tuple[int, int]:
-        resized_big = float(min_side) * big / small
+    def _rescale(small: int, big: int) -> Tuple[int, int, float]:
+        rescaled_ratio = float(min_side) / small
+        resized_big = rescaled_ratio * big
         resized_small = min_side
-        return int(resized_small), int(resized_big)
+        return int(resized_small), int(resized_big), rescaled_ratio
 
     if width <= height:
-        width, height = _rescale(width, height)
+        width, height, ratio = _rescale(width, height)
     else:
-        height, width = _rescale(height, width)
-    return width, height
+        height, width, ratio = _rescale(height, width)
+    return width, height, ratio
 
 
 def rescale_image(img: np.ndarray, resized_width: int, resized_height: int) -> np.ndarray:
@@ -55,3 +56,6 @@ def cal_fen_output_size(base_name: str, width: int, height: int) -> Tuple[int, i
     else:
         _msg = 'output calculataion method for {0} model is not implemented'.format(base_name)
         raise NotImplementedError(_msg)
+
+
+

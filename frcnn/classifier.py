@@ -9,8 +9,10 @@ from keras.losses import categorical_crossentropy
 from keras.optimizers import Adam
 
 from frcnn.config import Config
+from frcnn.logging import get_logger
 from frcnn.rpn import RegionProposalNetwork
 
+logger = get_logger(__name__)
 
 class RegionOfInterestPoolingLayer(Layer):
 
@@ -65,8 +67,6 @@ class RegionOfInterestPoolingLayer(Layer):
                 outputs.append(resized)
             except Exception as e:
                 print(e)
-                import ipdb
-                ipdb.set_trace()
 
         final_output = K.concatenate(outputs, axis=0)
         final_output = K.reshape(final_output, (1, self.n_roi, self.pool_height, self.pool_width, self.n_channel))
@@ -97,6 +97,7 @@ class ClassifierNetwork(object):
         self.anchor_stride = config.anchor_stride
 
         self.class_mapping = class_mapping
+        self.class_mapping_rev = {v: k for k, v in class_mapping.items()}
         self.n_class = len(class_mapping)  # number of classes (like car, human, bike, etc..) including background.
 
         # Initiliaze Region of Interest
@@ -147,7 +148,7 @@ class ClassifierNetwork(object):
         return roi_model
 
     @staticmethod
-    def regr_loss(num_classes: int, huber_delta: float = 1., epsilon: float = 1e-4):
+    def regr_loss(num_classes: int, huber_delta: float = 1., lambda_reg: float = 1., epsilon: float = 1e-4):
         def smooth_l1(y_true, y_pred):
             # y_true consists of two parts; labels and regressions
             # we uses only regression part
@@ -160,7 +161,7 @@ class ClassifierNetwork(object):
             x = K.switch(x < huber_delta, 0.5 * x ** 2, x - 0.5 * huber_delta)
             loss = K.sum(x) / (K.sum(cls_y) + epsilon)
 
-            return loss
+            return lambda_reg * loss
 
         return smooth_l1
 

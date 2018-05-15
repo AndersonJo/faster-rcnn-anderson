@@ -8,7 +8,7 @@ def non_max_suppression(boxes: np.ndarray, probs: np.ndarray = None, overlap_thr
 
     # if there are no boxes, return an empty list
     if len(boxes) == 0:
-        return []
+        return None, None
 
     # if the bounding boxes integers, convert them to floats --
     # this is important since we'll be doing a bunch of divisions

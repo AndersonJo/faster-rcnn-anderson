@@ -27,7 +27,7 @@ class ClassifierTrainer(object):
         self.n_roi = config.n_roi
 
     def next_batch(self, anchors: np.ndarray, image_data: dict, debug_image=False) -> Union[
-        Tuple[np.ndarray, np.ndarray, np.ndarray], Tuple[None, None, None]]:
+        Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray], Tuple[None, None, None, None]]:
         """
         :param anchors: (None, (x, y, w, h))
         :param image_data: a dictionary of image meta data
@@ -39,11 +39,11 @@ class ClassifierTrainer(object):
         gt_anchors, classes = ground_truth_anchors(image_data, subsampling_stride=self.anchor_stride)
 
         # Create target dataset for Classifier
-        rois, cls_y, reg_y, loc_obj, loc_bg = self._generate_train_data(anchors, gt_anchors, classes)
+        rois, cls_y, reg_y, loc_obj, loc_bg, best_ious = self._generate_train_data(anchors, gt_anchors, classes)
         picked_indices, pos_indices, neg_indices = self._pick(cls_y)
 
         if picked_indices is None:
-            return None, None, None
+            return None, None, None, None
 
         if debug_image:
             self._debug_images(rois, pos_indices, neg_indices, image_data)
@@ -52,13 +52,13 @@ class ClassifierTrainer(object):
         cls_y = cls_y[:, picked_indices, :]
         reg_y = reg_y[:, picked_indices, :]
 
-        return rois, cls_y, reg_y
+        return rois, cls_y, reg_y, best_ious
 
     def _pick(self, cls_y: np.ndarray) -> Union[Tuple[None, None, None], Tuple[np.ndarray, np.ndarray, np.ndarray]]:
         """
         :return: selected indices
         """
-
+        n_category = len(np.unique(np.argmax(cls_y, axis=2)))  # The number of class, including background class
         bg_idx = self.class_mapping['bg']
         neg_indices = np.where(cls_y[0, :, bg_idx] == 1)[0]
         pos_indices = np.where(cls_y[0, :, bg_idx] == 0)[0]
@@ -68,7 +68,7 @@ class ClassifierTrainer(object):
 
         try:
             # replace=False means it does not allow duplicate choices
-            neg_indices = np.random.choice(neg_indices, self.n_roi // 2, replace=False)
+            neg_indices = np.random.choice(neg_indices, self.n_roi // n_category, replace=False)
         except ValueError as e:
             # ValueError is raised when neg_indices is fewer than n_roi
             pass
@@ -84,7 +84,7 @@ class ClassifierTrainer(object):
         return picked_indices, pos_indices, neg_indices
 
     def _generate_train_data(self, anchors: np.ndarray, gt_anchors: np.ndarray, gt_classes: List[str]) -> Tuple[
-        np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Generate training data for Classifier Network
         :param anchors: picked anchors passed by Non Maximum Suppression (min_x, min_y, max_x, max_y)
@@ -107,7 +107,7 @@ class ClassifierTrainer(object):
 
         # Filter minimum IoUs
         loc_g, loc_a = np.where(ious > self.min_overlap)
-        # best_ious = ious[np.arange(n_gta), loc_best_ious]
+        best_ious = ious[np.arange(n_gta), loc_best_ious]
         ious = ious[loc_g, loc_a]
         n_ious = len(ious)
 
@@ -180,7 +180,7 @@ class ClassifierTrainer(object):
         cls_y = np.expand_dims(cls_y, axis=0)
         reg_y = np.expand_dims(reg_y, axis=0)
 
-        return rois, cls_y, reg_y, loc_obj, loc_bg
+        return rois, cls_y, reg_y, loc_obj, loc_bg, best_ious
 
     def _debug_images(self, rois, loc_obj, loc_bg, img_meta):
         image = cv2.imread(img_meta['image_path'])

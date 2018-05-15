@@ -1,4 +1,5 @@
 import os
+import re
 from typing import Tuple
 
 import cv2
@@ -9,11 +10,16 @@ from frcnn.anchor import to_absolute_coord, apply_regression_to_roi
 from frcnn.classifier import ClassifierNetwork
 from frcnn.config import Config
 from frcnn.fen import FeatureExtractionNetwork
+from frcnn.logging import get_logger
 from frcnn.nms import non_max_suppression
 from frcnn.rpn import RegionProposalNetwork
 
+logger = get_logger(__name__)
+
 
 class FRCNN(object):
+    CHECKPOINT_REGEX = 'model_(?P<step>\d+)_\d*\.\d*\.hdf5'
+
     def __init__(self, config: Config, class_mapping: dict, input_shape=(None, None, 3), train: bool = False):
         fen = FeatureExtractionNetwork(config, input_shape=input_shape)
         rpn = RegionProposalNetwork(fen, config, train=train)
@@ -154,7 +160,7 @@ class FRCNN(object):
 
         return anchors, probs
 
-    def clf_predict(self, batch_image: np.ndarray, anchors: np.ndarray, clf_threshold: float = 0.7):
+    def clf_predict(self, batch_image: np.ndarray, anchors: np.ndarray, clf_threshold: float = 0.7, img_meta=None):
         """
         :param batch_image: (1, h, w, 3) image
         :param anchors: (None, (min_x, min_y, max_x, max_y))
@@ -193,7 +199,18 @@ class FRCNN(object):
         regs[:, 2] /= self._clf_reg_std[2]
         regs[:, 3] /= self._clf_reg_std[3]
 
-        gta_pred = apply_regression_to_roi(regs, rois)
+        gta_regs = apply_regression_to_roi(regs, rois)  # gta_regs <- (g_x, g_y, g_w, g_h)
+        # Convert (g_x, g_y, g_w, g_h) -> (min_x, min_y, max_x, max_y)
+        gta_regs[:, 2] = gta_regs[:, 0] + gta_regs[:, 2]  # max_x
+        gta_regs[:, 3] = gta_regs[:, 1] + gta_regs[:, 3]  # max_y
+
+        # Inverse Anchor Stride
+        gta_regs[:, 0] *= self.clf.anchor_stride[0]
+        gta_regs[:, 1] *= self.clf.anchor_stride[1]
+        gta_regs[:, 2] *= self.clf.anchor_stride[0]
+        gta_regs[:, 3] *= self.clf.anchor_stride[1]
+
+        return cls_indices, gta_regs
 
     def _iter_rois(self, anchors):
         """
@@ -255,8 +272,26 @@ class FRCNN(object):
         if filepath is None:
             filepath = self._model_path
         self._model_all.save_weights(filepath)
+        logger.info('saved ' + filepath)
+
+    def load_latest(self) -> Tuple[int, str]:
+        checkpoints = list()
+        for filename in os.listdir('checkpoints'):
+            match = re.match(self.CHECKPOINT_REGEX, filename)
+            if match is None:
+                continue
+
+            step = int(match.group('step'))
+            checkpoints.append((step, filename))
+        checkpoints = sorted(checkpoints, key=lambda c: c[0])
+        lat_step, lat_checkpoint = checkpoints[-1]
+
+        self.load(os.path.join('checkpoints', lat_checkpoint))
+        logger.info('loaded latest checkpoint - ' + lat_checkpoint)
+        return lat_step, lat_checkpoint
 
     def load(self, filepath=None):
         if filepath is None:
             filepath = self._model_path
         self._model_all.load_weights(filepath)
+        logger.info('loaded ' + filepath)

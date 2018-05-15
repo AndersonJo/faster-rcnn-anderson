@@ -7,6 +7,10 @@ from typing import Tuple
 
 import cv2
 
+from frcnn.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 class BaseData(ABC):
 

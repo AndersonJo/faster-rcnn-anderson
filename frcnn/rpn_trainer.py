@@ -6,9 +6,13 @@ import cv2
 import numpy as np
 
 from frcnn.anchor import to_relative_coord
+from frcnn.augment import augment
 from frcnn.config import singleton_config
 from frcnn.iou import cal_iou
+from frcnn.logging import get_logger
 from frcnn.tools import cal_rescaled_size, rescale_image, cal_fen_output_size
+
+logger = get_logger(__name__)
 
 
 class RPNTargetProcessor(object):
@@ -39,32 +43,39 @@ class RPNTargetProcessor(object):
         self.max_overlap = max_overlap
         self.max_anchor = max_anchor
 
-    def process_image(self, datum: dict) -> np.ndarray:
+    def process_image(self, meta: dict) -> Tuple[np.ndarray, np.ndarray]:
         """
         The method pre-processes just a single datum (not batch data)
-        :param datum: single data point (i.e. VOC Data)
+        :param meta: single data point (i.e. VOC Data)
         :param rescale: rescaling can improve accuracy but may decrease calculation speed in trade-off
         :return:
+            - rescaled_image: bigger normalized RGB image which has been rescaled
+            - image: original image (BGR and not normalized)
         """
-        image = cv2.imread(datum['image_path'])
+        image = cv2.imread(meta['image_path'])
+        # Augment
+        image, meta = augment(image, meta)
         height, width, _ = image.shape
 
         # Rescale Image: at least one side of image should be larger than or equal to minimum size;
         # It may improve accuracy but decrease training or inference speed in trade-off.
+
         if self._rescale:
-            rescaled_width, rescaled_height = cal_rescaled_size(width, height)
-            image = rescale_image(image, rescaled_width, rescaled_height)
-
+            rescaled_width, rescaled_height, rescaled_ratio = cal_rescaled_size(width, height)
+            rescaled_image = rescale_image(image, rescaled_width, rescaled_height)
         else:
-            rescaled_width, rescaled_height = width, height
+            rescaled_width, rescaled_height, rescaled_ratio = width, height, 0.
+            rescaled_image = image
 
-        datum['rescaled_width'] = rescaled_width
-        datum['rescaled_height'] = rescaled_height
+        meta['rescaled_width'] = rescaled_width
+        meta['rescaled_height'] = rescaled_height
+        meta['rescaled_ratio'] = rescaled_ratio
         # cls_target, regr_target = self.generate_rpn_target(datum, image)
 
         # Post Processing the Image
-        image = self.postprocess_image(image)
-        return image
+
+        rescaled_image = self.postprocess_image(rescaled_image)
+        return rescaled_image, image
 
     def postprocess_image(self, image: np.ndarray) -> np.ndarray:
         """
@@ -300,21 +311,21 @@ class RPNTrainer(object):
     def anchor(self) -> RPNTargetProcessor:
         return self._anchor
 
-    def next_batch(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
+    def next_batch(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict]:
         if self._cur_idx >= self.n_data:
             self._cur_idx = 0
 
         if self._cur_idx == 0 and self._shuffle:
+            logger.debug('shuffle data')
             perm = np.random.permutation(len(self._dataset))
             self._dataset = self._dataset[perm]
 
-        img_meta = self._dataset[self._cur_idx]
-
+        meta = self._dataset[self._cur_idx]
         self._cur_idx += 1
 
-        image = self.anchor.process_image(img_meta)
-        cls_target, reg_target, = self.anchor.generate_rpn_target(img_meta)
-        return image, cls_target, reg_target, img_meta
+        rescaled_image, origial_image = self.anchor.process_image(meta)
+        cls_target, reg_target, = self.anchor.generate_rpn_target(meta)
+        return rescaled_image, origial_image, cls_target, reg_target, meta
 
     def count(self):
         return len(self._dataset)
@@ -333,7 +344,7 @@ class RPNDataProcessor(RPNTrainer):
     Use this class for inference phase. If you want to train a model, use RPNTrainer class.
     """
 
-    def next_batch(self) -> Tuple[np.ndarray, dict]:
+    def next_batch(self) -> Tuple[np.ndarray, np.ndarray, dict]:
         if self._cur_idx >= self.n_data:
             self._cur_idx = 0
 
@@ -341,9 +352,9 @@ class RPNDataProcessor(RPNTrainer):
             perm = np.random.permutation(len(self._dataset))
             self._dataset = self._dataset[perm]
 
-        img_meta = self._dataset[self._cur_idx]
+        meta = self._dataset[self._cur_idx]
 
         self._cur_idx += 1
 
-        image = self.anchor.process_image(img_meta)
-        return image, img_meta
+        rescaled_image, original_image = self.anchor.process_image(meta)
+        return rescaled_image, original_image, meta
