@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 from keras import Model
 
-from frcnn.anchor import to_absolute_coord, apply_regression_to_roi
+from frcnn.anchor import to_absolute_coord_np, apply_regression_to_roi
 from frcnn.classifier import ClassifierNetwork
 from frcnn.config import Config
 from frcnn.fen import FeatureExtractionNetwork
@@ -125,7 +125,7 @@ class FRCNN(object):
                 anchors[1, :, :, cur_anchor] = Y  # the center coordinate of anchor's height (37, 50)
                 anchors[2, :, :, cur_anchor] = anchor_width  # anchor width <scalar value>
                 anchors[3, :, :, cur_anchor] = anchor_height  # anchor height <scalar value>
-                anchors[:, :, :, cur_anchor] = to_absolute_coord(anchors[:, :, :, cur_anchor], regr)
+                anchors[:, :, :, cur_anchor] = to_absolute_coord_np(anchors[:, :, :, cur_anchor], regr)
 
                 # it makes sure that anchors' width and height are at least 1
                 # Convert (w, h) to (max_x, max_y) by adding (min_x, min_y) to (w, h)

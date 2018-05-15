@@ -68,35 +68,23 @@ def train_voc(config: Config, train: list, class_mapping: dict):
 
     for epoch in range(100):
         for step in range(len(train)):
-            now = datetime.now()
             batch_image, original_image, batch_cls, batch_regr, meta = rpn_trainer.next_batch()
-            t1 = (datetime.now() - now).total_seconds()
-            now = datetime.now()
 
             # Train Region Proposal Network
             rpn_loss = frcnn.rpn_model.train_on_batch(batch_image, [batch_cls, batch_regr])
-            t2 = (datetime.now() - now).total_seconds()
-            now = datetime.now()
 
             # Train Classifier Network
             rpn_cls, rpn_reg = frcnn.rpn_model.predict_on_batch(batch_image)
-            t3 = (datetime.now() - now).total_seconds()
-            now = datetime.now()
 
             anchors, probs = frcnn.generate_anchors(rpn_cls, rpn_reg)
             # clf.debug_nms_images(anchors, img_meta)
-            rois, cls_y, reg_y, best_ious = clf_trainer.next_batch(anchors, meta, debug_image=False)
-            t4 = (datetime.now() - now).total_seconds()
-            now = datetime.now()
+            rois, cls_y, reg_y, best_ious = clf_trainer.next_batch(anchors, meta)
 
             if rois is None:
                 continue
 
             clf_loss = frcnn.clf_model.train_on_batch([batch_image, rois], [cls_y, reg_y])
             # cls_pred, reg_pred = clf.model.predict_on_batch([batch_img, rois])
-
-            t5 = (datetime.now() - now).total_seconds()
-            now = datetime.now()
 
             # Update Visualization
             total_loss = rpn_loss[0] + clf_loss[0]
@@ -112,13 +100,6 @@ def train_voc(config: Config, train: list, class_mapping: dict):
                                   ('clf', clf_loss[0]),
 
                                   ('best_iou', len(best_ious)),
-                                  # ('t1', t1),
-                                  # ('t2', t2),
-                                  # ('t3', t3),
-                                  # ('t4', t4),
-                                  # ('t5', t5),
-                                  # ('clf_c', clf_loss[1]),
-                                  # ('clf_r', clf_loss[2])
                                   ])
 
             print()

@@ -5,7 +5,7 @@ from typing import List, Tuple
 import cv2
 import numpy as np
 
-from frcnn.anchor import to_relative_coord
+from frcnn.anchor import to_relative_coord, to_absolute_coord
 from frcnn.augment import augment
 from frcnn.config import singleton_config
 from frcnn.iou import cal_iou
@@ -43,18 +43,20 @@ class RPNTargetProcessor(object):
         self.max_overlap = max_overlap
         self.max_anchor = max_anchor
 
-    def process_image(self, meta: dict) -> Tuple[np.ndarray, np.ndarray]:
+    def process_image(self, meta: dict, aug=True) -> Tuple[np.ndarray, np.ndarray]:
         """
         The method pre-processes just a single datum (not batch data)
         :param meta: single data point (i.e. VOC Data)
-        :param rescale: rescaling can improve accuracy but may decrease calculation speed in trade-off
+        :param aug: augmentation
         :return:
             - rescaled_image: bigger normalized RGB image which has been rescaled
             - image: original image (BGR and not normalized)
         """
         image = cv2.imread(meta['image_path'])
         # Augment
-        image, meta = augment(image, meta)
+        if aug:
+            image, meta = augment(image, meta)
+
         height, width, _ = image.shape
 
         # Rescale Image: at least one side of image should be larger than or equal to minimum size;
@@ -96,12 +98,12 @@ class RPNTargetProcessor(object):
         image = np.expand_dims(image, axis=0)
         return image
 
-    def generate_rpn_target(self, datum: dict, image: np.ndarray = None) -> Tuple[np.ndarray, np.ndarray]:
-        width = datum['width']
-        height = datum['height']
-        rescaled_width = datum['rescaled_width']
-        rescaled_height = datum['rescaled_height']
-        n_object = len(datum['objects'])
+    def generate_rpn_target(self, meta: dict, image: np.ndarray = None) -> Tuple[np.ndarray, np.ndarray]:
+        width = meta['width']
+        height = meta['height']
+        rescaled_width = meta['rescaled_width']
+        rescaled_height = meta['rescaled_height']
+        n_object = len(meta['objects'])
         n_ratio = len(self.anchor_ratios)
         n_anchor = len(self.anchor_ratios) * len(self.anchor_scales)
 
@@ -122,12 +124,17 @@ class RPNTargetProcessor(object):
         _comb = [range(output_height), range(output_width),
                  range(len(self.anchor_scales)), range(len(self.anchor_ratios)), range(n_object)]
 
+        # DEBUG
+        # _image = image[0].copy()
+        # _image = _image[:, :, (2, 1, 0)].astype('uint8').copy()
+        # _image += 127
+
         for y_pos, x_pos, anc_scale_idx, anc_rat_idx, idx_obj in itertools.product(*_comb):
             anc_scale = self.anchor_scales[anc_scale_idx]
             anc_rat = self.anchor_ratios[anc_rat_idx]
 
             # ground-truth box coordinates on the rescaled image
-            obj_info = datum['objects'][idx_obj]
+            obj_info = meta['objects'][idx_obj]
             gta_coord = self.cal_gta_coordinate(obj_info[1:], width, height, rescaled_width, rescaled_height)
 
             # anchor box coordinates on the rescaled image
@@ -143,6 +150,7 @@ class RPNTargetProcessor(object):
 
             # Calculate regression target
             if iou > best_iou_for_box[idx_obj] or iou > self.max_overlap:
+                # The regression target fit to the rescaled image
                 reg_target = to_relative_coord(gta_coord, anchor_coord)
 
             # Ground-truth bounding box should be mapped to at least one anchor box.
@@ -159,11 +167,11 @@ class RPNTargetProcessor(object):
             is_valid_anchor = bool(y_valid_box[y_pos, x_pos, z_pos] == 1)
 
             if iou > self.max_overlap:  # Positive anchors
-
                 n_pos_anchor_for_box[idx_obj] += 1
                 y_valid_box[y_pos, x_pos, z_pos] = 1
                 y_cls_target[y_pos, x_pos, z_pos] = 1
                 y_regr_targets[y_pos, x_pos, z_pos: z_pos + 4] = reg_target
+                # TestRPN.apply(_image, x_pos, y_pos, anc_scale, anc_rat, reg_target)
 
             elif iou < self.min_overlap and not is_valid_anchor:  # Negative anchors
                 y_valid_box[y_pos, x_pos, z_pos] = 1
@@ -204,6 +212,9 @@ class RPNTargetProcessor(object):
         y_cls_target = np.expand_dims(y_cls_target, axis=0)
         y_valid_box = np.expand_dims(y_valid_box, axis=0)
         y_regr_targets = np.expand_dims(y_regr_targets, axis=0)
+
+        # Debug
+        # cv2.imwrite('temp/' + meta['filename'], _image)
 
         # Final target data
         # Classification loss in RPN only uses y_valid_box.
@@ -274,17 +285,6 @@ class RPNTargetProcessor(object):
             return False
         return True
 
-    @staticmethod
-    def rectangle(image, x_pos: int, y_pos: int, anc_scale: int, anc_rat: List[float]):
-        w, h = anc_scale * anc_rat[0], anc_scale * anc_rat[1]
-        cv2.rectangle(image, (int(x_pos * 16 - w / 2), int(y_pos * 16 - h / 2)),
-                      (int(x_pos * 16 + w / 2), int(y_pos * 16 + h / 2)),
-                      (0, 0, 255))
-
-    @staticmethod
-    def point(image, x_pos: int, y_pos: int, color=(0, 0, 255)):
-        cv2.rectangle(image, (x_pos * 16, y_pos * 16), (x_pos * 16 + 5, y_pos * 16 + 5), color)
-
 
 class RPNTrainer(object):
     def __init__(self, dataset: list, shuffle: bool = True, augment: bool = False):
@@ -323,8 +323,8 @@ class RPNTrainer(object):
         meta = self._dataset[self._cur_idx]
         self._cur_idx += 1
 
-        rescaled_image, origial_image = self.anchor.process_image(meta)
-        cls_target, reg_target, = self.anchor.generate_rpn_target(meta)
+        rescaled_image, origial_image = self.anchor.process_image(meta, aug=self._augment)
+        cls_target, reg_target, = self.anchor.generate_rpn_target(meta, rescaled_image)
         return rescaled_image, origial_image, cls_target, reg_target, meta
 
     def count(self):
@@ -344,7 +344,11 @@ class RPNDataProcessor(RPNTrainer):
     Use this class for inference phase. If you want to train a model, use RPNTrainer class.
     """
 
-    def next_batch(self) -> Tuple[np.ndarray, np.ndarray, dict]:
+    def next_batch(self, aug: bool = False) -> Tuple[np.ndarray, np.ndarray, dict]:
+        """
+        :param aug: augmentation
+        :return:
+        """
         if self._cur_idx >= self.n_data:
             self._cur_idx = 0
 
@@ -356,5 +360,5 @@ class RPNDataProcessor(RPNTrainer):
 
         self._cur_idx += 1
 
-        rescaled_image, original_image = self.anchor.process_image(meta)
+        rescaled_image, original_image = self.anchor.process_image(meta, aug=aug)
         return rescaled_image, original_image, meta

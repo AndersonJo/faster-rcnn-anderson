@@ -1,3 +1,4 @@
+import math
 from typing import List, Tuple
 import numpy as np
 
@@ -34,10 +35,66 @@ def ground_truth_anchors(image_data: dict, subsampling_stride: List[int] = None)
 
 
 ##############################################################################################
-# Coordinates Tools
+# Single Coordinates Tools
+##############################################################################################
+def to_absolute_coord(anchor, regr):
+    """
+    :param anchor: (min_x, min_y, max_x, max_y)
+    :param regr: (tx, ty, tw, th)
+    :return: (cx, cy, w, h)
+    """
+    w = anchor[2] - anchor[0]
+    h = anchor[3] - anchor[1]
+    cx = (anchor[0] + anchor[2]) / 2
+    cy = (anchor[1] + anchor[3]) / 2
+
+    tx, ty, tw, th = regr
+
+    g_cx = tx * w + cx
+    g_cy = ty * h + cy
+    g_w = math.exp(tw) * w
+    g_h = math.exp(th) * h
+
+    return g_cx, g_cy, g_w, g_h
+
+
+def to_relative_coord(gta_coord: np.ndarray, anchor_coord: np.ndarray) -> np.ndarray:
+    """
+    Create a "single" regression target data of region proposal network
+    :param gta_coord: ground-truth box coordinates [x_min, y_min, x_max, y_max]
+    :param anchor_coord: anchor box coordinates [x_min, y_min, x_max, y_max]
+    :return: regression target (t_x, t_y, t_w, t_h)
+    """
+    # gt_cx: the center x (the center of width) of ground-truth box (in a rescaled image)
+    # gt_cy: the center y (the center of height) of ground-truth box (in a rescaled image)
+    gt_cx = (gta_coord[0] + gta_coord[2]) / 2.
+    gt_cy = (gta_coord[1] + gta_coord[3]) / 2.
+
+    # a_cx: the center x (the center of width) of the anchor box (in a rescaled image)
+    # a_cy: the center y (the center of height) of the anchor box (in a rescaled image)
+    a_cx = (anchor_coord[0] + anchor_coord[2]) / 2.
+    a_cy = (anchor_coord[1] + anchor_coord[3]) / 2.
+
+    # a_width: the width value of the anchor
+    # a_height: the height value of the anchor
+    a_width = anchor_coord[2] - anchor_coord[0]
+    a_height = anchor_coord[3] - anchor_coord[1]
+    g_width = gta_coord[2] - gta_coord[0]
+    g_height = gta_coord[3] - gta_coord[1]
+
+    tx = (gt_cx - a_cx) / a_width
+    ty = (gt_cy - a_cy) / a_height
+    tw = np.log(g_width / a_width)
+    th = np.log(g_height / a_height)
+
+    return np.array([tx, ty, tw, th])
+
+
+##############################################################################################
+# Multiple Coordinates Tools
 ##############################################################################################
 
-def to_absolute_coord(anchors, regrs):
+def to_absolute_coord_np(anchors, regrs):
     """
     To Absolute Coordinates Function
     The method converts relative coordinates (tx, ty, tw, th)
@@ -84,38 +141,6 @@ def to_absolute_coord(anchors, regrs):
     h = np.round(h)
 
     return np.stack([min_x, min_y, w, h])
-
-
-def to_relative_coord(gta_coord: np.ndarray, anchor_coord: np.ndarray) -> np.ndarray:
-    """
-    Create regression target data of region proposal network
-    :param gta_coord: ground-truth box coordinates [x_min, y_min, x_max, y_max]
-    :param anchor_coord: anchor box coordinates [x_min, y_min, x_max, y_max]
-    :return: regression target (t_x, t_y, t_w, t_h)
-    """
-    # gt_cx: the center x (the center of width) of ground-truth box (in a rescaled image)
-    # gt_cy: the center y (the center of height) of ground-truth box (in a rescaled image)
-    gt_cx = (gta_coord[0] + gta_coord[2]) / 2.
-    gt_cy = (gta_coord[1] + gta_coord[3]) / 2.
-
-    # a_cx: the center x (the center of width) of the anchor box (in a rescaled image)
-    # a_cy: the center y (the center of height) of the anchor box (in a rescaled image)
-    a_cx = (anchor_coord[0] + anchor_coord[2]) / 2.
-    a_cy = (anchor_coord[1] + anchor_coord[3]) / 2.
-
-    # a_width: the width value of the anchor
-    # a_height: the height value of the anchor
-    a_width = anchor_coord[2] - anchor_coord[0]
-    a_height = anchor_coord[3] - anchor_coord[1]
-    g_width = gta_coord[2] - gta_coord[0]
-    g_height = gta_coord[3] - gta_coord[1]
-
-    tx = (gt_cx - a_cx) / a_width
-    ty = (gt_cy - a_cy) / a_height
-    tw = np.log(g_width / a_width)
-    th = np.log(g_height / a_height)
-
-    return np.array([tx, ty, tw, th])
 
 
 def to_relative_coord_np(gta_coords: np.ndarray, anchor_coords: np.ndarray):
