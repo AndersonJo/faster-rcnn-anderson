@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 
+from frcnn.debug import check_clf_trainer_classification
 from frcnn.logging import get_logger
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -57,7 +58,7 @@ def train_voc(config: Config, train: list, class_mapping: dict):
 
     # Create Model
     frcnn = FRCNN(config, class_mapping, train=True)
-    frcnn.load_latest()
+    frcnn.load_most_accurate_model()
 
     # Progress Bar
     progbar = Progbar(len(train))
@@ -89,7 +90,7 @@ def train_voc(config: Config, train: list, class_mapping: dict):
             # Update Visualization
             total_loss = rpn_loss[0] + clf_loss[0]
 
-            if total_loss < best_loss and global_step > 1000:
+            if (total_loss < best_loss and global_step > 1000) or (global_step % 1000 == 0):
                 best_loss = total_loss
                 filename = 'checkpoints/model_{0}_{1:.4}.hdf5'.format(step, round(total_loss, 4))
                 frcnn.save(filename)
@@ -98,26 +99,16 @@ def train_voc(config: Config, train: list, class_mapping: dict):
             global_step += 1
             progbar.update(step, [('rpn', rpn_loss[0]),
                                   ('clf', clf_loss[0]),
-
                                   ('best_iou', len(best_ious)),
                                   ])
-
             print()
 
-            _answer_class = [obj[0] for obj in meta['objects']]
-            if len(set(_answer_class)) >= 2:
-                _pred_class = [inv_class_mapping[idx] for idx in np.argmax(cls_y, axis=2).tolist()[0]]
-                _pred_class = list(filter(lambda x: x != 'bg', _pred_class))
+            # check_clf_trainer_classification(cls_y, meta, inv_class_mapping)
 
-                print()
-                print('predict:', _pred_class)
-                print('answer:', _answer_class)
-                print()
-
-                # cls_indices, gta_regs = frcnn.clf_predict(batch_image, anchors, img_meta=meta)
-                # gta_regs, cls_indices = non_max_suppression(gta_regs, cls_indices, overlap_threshold=0.5)
-                # if gta_regs is not None:
-                #     visualize(original_image, meta, gta_regs)
+            # cls_indices, gta_regs = frcnn.clf_predict(batch_image, anchors, img_meta=meta)
+            # gta_regs, cls_indices = non_max_suppression(gta_regs, cls_indices, overlap_threshold=0.5)
+            # if gta_regs is not None:
+            #     visualize(original_image, meta, gta_regs)
 
             # Visualize
             # cls_indices, gta_regs = frcnn.clf_predict(batch_image, anchors, img_meta=meta)
@@ -134,7 +125,8 @@ def test_voc(config: Config, test: list, class_mapping: dict):
 
     # Create Model
     frcnn = FRCNN(config, class_mapping)
-    frcnn.load('checkpoints/model_33758_0.11919999867677689.hdf5')
+    # frcnn.load_most_accurate_model()
+    frcnn.load('checkpoints/model_3596_0.0912.hdf5')
 
     # Inference
     for step in range(rpn_data.count()):
@@ -142,6 +134,15 @@ def test_voc(config: Config, test: list, class_mapping: dict):
 
         rpn_cls, rpn_reg, f_maps = frcnn.rpn_model.predict_on_batch(batch_image)
         anchors, probs = frcnn.generate_anchors(rpn_cls, rpn_reg)
+
+        # DEBUG
+
+        for anchor in anchors:
+            cv2.rectangle(original_image, (anchor[0], anchor[1]), (anchor[2], anchor[3]), (0, 0, 255))
+
+        cv2.imwrite('temp/' + meta['filename'], original_image)
+        import ipdb
+        ipdb.set_trace()
 
         cls_indices, gta_regs = frcnn.clf_predict(batch_image, anchors, img_meta=meta)
         gta_regs, cls_indices = non_max_suppression(gta_regs, cls_indices, overlap_threshold=0.5)

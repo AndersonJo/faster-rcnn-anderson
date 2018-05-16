@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 
 
 class FRCNN(object):
-    CHECKPOINT_REGEX = 'model_(?P<step>\d+)_\d*\.\d*\.hdf5'
+    CHECKPOINT_REGEX = 'model_(?P<step>\d+)_(?P<loss>\d*\.\d*)\.hdf5'
 
     def __init__(self, config: Config, class_mapping: dict, input_shape=(None, None, 3), train: bool = False):
         fen = FeatureExtractionNetwork(config, input_shape=input_shape)
@@ -274,24 +274,29 @@ class FRCNN(object):
         self._model_all.save_weights(filepath)
         logger.info('saved ' + filepath)
 
-    def load_latest(self) -> Tuple[int, str]:
+    def load_most_accurate_model(self) -> Tuple[float, str]:
         checkpoints = list()
         for filename in os.listdir('checkpoints'):
             match = re.match(self.CHECKPOINT_REGEX, filename)
             if match is None:
                 continue
 
-            step = int(match.group('step'))
-            checkpoints.append((step, filename))
-        checkpoints = sorted(checkpoints, key=lambda c: c[0])
-        lat_step, lat_checkpoint = checkpoints[-1]
+            loss = float(match.group('loss'))
+            checkpoints.append((loss, filename))
 
-        self.load(os.path.join('checkpoints', lat_checkpoint))
-        logger.info('loaded latest checkpoint - ' + lat_checkpoint)
-        return lat_step, lat_checkpoint
+        if len(checkpoints) >= 1:
+            checkpoints = sorted(checkpoints, key=lambda c: c[0])
+            lat_loss, lat_checkpoint = checkpoints[0]
+
+            self.load(os.path.join('checkpoints', lat_checkpoint))
+            logger.info('loaded latest checkpoint - ' + lat_checkpoint)
+        else:
+            logger.info('no checkpoint')
+
+        return lat_loss, lat_checkpoint
 
     def load(self, filepath=None):
         if filepath is None:
             filepath = self._model_path
         self._model_all.load_weights(filepath)
-        logger.info('loaded ' + filepath)
+        logger.info('load: ' + filepath)

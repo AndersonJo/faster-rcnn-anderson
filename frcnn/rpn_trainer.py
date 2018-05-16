@@ -61,7 +61,6 @@ class RPNTargetProcessor(object):
 
         # Rescale Image: at least one side of image should be larger than or equal to minimum size;
         # It may improve accuracy but decrease training or inference speed in trade-off.
-
         if self._rescale:
             rescaled_width, rescaled_height, rescaled_ratio = cal_rescaled_size(width, height)
             rescaled_image = rescale_image(image, rescaled_width, rescaled_height)
@@ -72,10 +71,8 @@ class RPNTargetProcessor(object):
         meta['rescaled_width'] = rescaled_width
         meta['rescaled_height'] = rescaled_height
         meta['rescaled_ratio'] = rescaled_ratio
-        # cls_target, regr_target = self.generate_rpn_target(datum, image)
 
         # Post Processing the Image
-
         rescaled_image = self.postprocess_image(rescaled_image)
         return rescaled_image, image
 
@@ -190,7 +187,12 @@ class RPNTargetProcessor(object):
 
                 y_valid_box[y_pos, x_pos, z_pos] = 1
                 y_cls_target[y_pos, x_pos, z_pos] = 1
-                y_regr_targets[y_pos, x_pos, z_pos: z_pos + 4] = reg_target
+                try:
+                    y_regr_targets[y_pos, x_pos, z_pos: z_pos + 4] = reg_target
+                except Exception as e:
+                    print(e)
+                    import ipdb
+                    ipdb.set_trace()
 
         # It is more likely to have more negative anchors than positive anchors.
         # The ratio between negative and positive anchors should be equal.
@@ -344,7 +346,7 @@ class RPNDataProcessor(RPNTrainer):
     Use this class for inference phase. If you want to train a model, use RPNTrainer class.
     """
 
-    def next_batch(self, aug: bool = False) -> Tuple[np.ndarray, np.ndarray, dict]:
+    def next_batch(self) -> Tuple[np.ndarray, np.ndarray, dict]:
         """
         :param aug: augmentation
         :return:
@@ -360,5 +362,5 @@ class RPNDataProcessor(RPNTrainer):
 
         self._cur_idx += 1
 
-        rescaled_image, original_image = self.anchor.process_image(meta, aug=aug)
+        rescaled_image, original_image = self.anchor.process_image(meta, aug=False)
         return rescaled_image, original_image, meta

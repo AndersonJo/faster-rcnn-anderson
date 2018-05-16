@@ -1,6 +1,7 @@
 from typing import List
 
 import cv2
+import numpy as np
 
 from frcnn.anchor import to_absolute_coord
 
@@ -9,6 +10,7 @@ class TestRPN:
     """
     The class is used in `rpn_trainer.py -> RPNTargetProcessor -> generate_rpn_target`
     """
+
     @staticmethod
     def rectangle(image, x_pos: int, y_pos: int, anc_scale: int, anc_rat: List[float]):
         w, h = anc_scale * anc_rat[0], anc_scale * anc_rat[1]
@@ -35,3 +37,15 @@ class TestRPN:
         g_y2 = int(g_cy + g_h / 2)
 
         cv2.rectangle(_image, (g_x1, g_y1), (g_x2, g_y2), (0, 0, 255))
+
+
+def check_clf_trainer_classification(cls_y, meta, inv_class_mapping):
+    _answer_class = [obj[0] for obj in meta['objects']]
+    if len(set(_answer_class)) >= 2:
+        _pred_class = [inv_class_mapping[idx] for idx in np.argmax(cls_y, axis=2).tolist()[0]]
+        _pred_class = list(filter(lambda x: x != 'bg', _pred_class))
+
+        print()
+        print('predict:', _pred_class)
+        print('answer:', _answer_class)
+        print()

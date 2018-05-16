@@ -9,6 +9,9 @@ import numpy as np
 from frcnn.anchor import ground_truth_anchors, to_relative_coord_np
 from frcnn.config import Config
 from frcnn.iou import cal_iou
+from frcnn.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class ClassifierTrainer(object):
@@ -26,27 +29,27 @@ class ClassifierTrainer(object):
         self.n_class = len(class_mapping)
         self.n_roi = config.n_roi
 
-    def next_batch(self, anchors: np.ndarray, image_data: dict, debug_image=False) -> Union[
+    def next_batch(self, anchors: np.ndarray, meta: dict, debug_image=False) -> Union[
         Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray], Tuple[None, None, None, None]]:
         """
         :param anchors: (None, (x, y, w, h))
-        :param image_data: a dictionary of image meta data
+        :param meta: a dictionary of image meta data
         :param overlap_threshold : overlap threshold used for Non Max Suppression
         :return:
             - (None, None, None) or (rois, cls_y, reg_y)
         """
         # Create ground-truth anchors
-        gt_anchors, classes = ground_truth_anchors(image_data, subsampling_stride=self.anchor_stride)
+        gt_anchors, classes = ground_truth_anchors(meta, subsampling_stride=self.anchor_stride)
 
         # Create target dataset for Classifier
         rois, cls_y, reg_y, loc_obj, loc_bg, best_ious = self._generate_train_data(anchors, gt_anchors, classes)
-        picked_indices, pos_indices, neg_indices = self._pick(cls_y)
+        picked_indices, pos_indices, neg_indices = self._pick(cls_y, meta)
 
         if picked_indices is None:
             return None, None, None, None
 
         if debug_image:
-            self._debug_images(rois, pos_indices, neg_indices, image_data)
+            self._debug_images(rois, pos_indices, neg_indices, meta)
 
         rois = rois[:, picked_indices, :]
         cls_y = cls_y[:, picked_indices, :]
@@ -54,10 +57,14 @@ class ClassifierTrainer(object):
 
         return rois, cls_y, reg_y, best_ious
 
-    def _pick(self, cls_y: np.ndarray) -> Union[Tuple[None, None, None], Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    def _pick(self, cls_y: np.ndarray, meta=None) -> Union[
+        Tuple[None, None, None], Tuple[np.ndarray, np.ndarray, np.ndarray]]:
         """
+        :param cls_y: (batch, n_proposals, n_class)  for example, (1, 141, 21)
+        :param meta: debug
         :return: selected indices
         """
+        gt_classes = [self.class_mapping[obj[0]] for obj in meta['objects']]
         n_category = len(np.unique(np.argmax(cls_y, axis=2)))  # The number of class, including background class
         bg_idx = self.class_mapping['bg']
         neg_indices = np.where(cls_y[0, :, bg_idx] == 1)[0]
@@ -65,6 +72,13 @@ class ClassifierTrainer(object):
 
         if not len(pos_indices) or not len(neg_indices):
             return None, None, None
+
+        # DEBUG
+        n_y_object = (cls_y.sum(axis=1) >= 1).sum()
+        n_gt_object = len(set(gt_classes)) + 1
+
+        if n_gt_object != n_y_object:
+            print('WRONG!!!!!', 'n_y_cls:', n_y_object, 'n_gt_cls:', n_gt_object)
 
         try:
             # replace=False means it does not allow duplicate choices
@@ -83,7 +97,8 @@ class ClassifierTrainer(object):
         picked_indices = np.concatenate([pos_indices, neg_indices], axis=0)
         return picked_indices, pos_indices, neg_indices
 
-    def _generate_train_data(self, anchors: np.ndarray, gt_anchors: np.ndarray, gt_classes: List[str]) -> Tuple[
+    def _generate_train_data(self, anchors: np.ndarray, gt_anchors: np.ndarray, gt_classes: List[str],
+                             trick: bool = True) -> Tuple[
         np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
         Generate training data for Classifier Network
@@ -98,16 +113,30 @@ class ClassifierTrainer(object):
         # Calculate IoUs
         n_gta = len(gt_anchors)
         ious = np.zeros((n_gta, len(anchors)))
-        loc_best_ious = np.zeros(n_gta, dtype='int')
 
+        # Find the Best IoUs for each of ground-truth anchor
         for i in range(n_gta):
             gt_anchor = gt_anchors[i]
             ious[i, :] = [cal_iou(a, gt_anchor) for a in anchors]
-            loc_best_ious[i] = np.argmax(ious[i, :])
+        loc_best_ious = np.argmax(ious, axis=1)  # index of maximum IoU for each ground truth object
+        best_ious = ious[np.arange(n_gta), loc_best_ious]
+
+        # Trick for ensuring best IoUs are included
+        # It is a kinda forceful way to include best IoUs even though the IoUs have low values
+        # The trick is not part of the paper.
+        # @creator: Anderson Jo
+        if trick:
+            _filter = best_ious + 0.3 > self.max_overlap
+            _n_under_overlap = _filter.sum()
+            _n_max_overlap = (best_ious > self.max_overlap).sum()
+
+            if _n_under_overlap >= 1 and _n_under_overlap != _n_max_overlap:
+                ious[np.arange(n_gta)[_filter], loc_best_ious[_filter]] = np.maximum(best_ious[_filter],
+                                                                                     self.max_overlap + 0.0001)
+                logger.debug('[trick activated] best IoUs: ' + str(best_ious[_filter]))
 
         # Filter minimum IoUs
         loc_g, loc_a = np.where(ious > self.min_overlap)
-        best_ious = ious[np.arange(n_gta), loc_best_ious]
         ious = ious[loc_g, loc_a]
         n_ious = len(ious)
 
@@ -130,8 +159,8 @@ class ClassifierTrainer(object):
         ################################################################################
         loc_bg = np.where(ious < self.max_overlap)[0]
         loc_obj = np.where(ious >= self.max_overlap)[0]
-        n_obj = len(loc_obj)
 
+        n_obj = len(loc_obj)
         cls_y = np.zeros((n_ious, self.n_class))
         cls_y[loc_bg, self.class_mapping['bg']] = 1
         class_obj_indices = None

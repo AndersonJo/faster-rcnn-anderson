@@ -56,7 +56,7 @@ class Config:
     # Classifier Network
     ###################################
     clf_min_overlap = 0.1
-    clf_max_overlap = 0.7
+    clf_max_overlap = 0.6
     clf_regr_std = [8., 8., 4., 4.]
 
     ###################################
