@@ -14,6 +14,7 @@ from frcnn.rpn import RegionProposalNetwork
 
 logger = get_logger(__name__)
 
+
 class RegionOfInterestPoolingLayer(Layer):
 
     def __init__(self, size: List[int] = (), n_roi: int = 32, method: str = 'resize', **kwargs):
@@ -154,8 +155,9 @@ class ClassifierNetwork(object):
             # we uses only regression part
             reg_y = y_true[:, :, 4 * (num_classes - 1):]
 
-            cond = tf.equal(reg_y, tf.constant(0.))
-            cls_y = tf.where(cond, tf.zeros_like(reg_y), tf.ones_like(reg_y))
+            # cond = tf.equal(reg_y, tf.constant(0.))
+            # cls_y = tf.where(cond, tf.zeros_like(reg_y), tf.ones_like(reg_y))
+            cls_y = y_true[:, :, :4 * num_classes]
 
             x = K.abs(reg_y - y_pred)
             x = K.switch(x < huber_delta, 0.5 * x ** 2, x - 0.5 * huber_delta)
@@ -163,7 +165,15 @@ class ClassifierNetwork(object):
 
             return lambda_reg * loss
 
-        return smooth_l1
+        def class_loss_regr_fixed_num(y_true, y_pred):
+            x = y_true[:, :, 4 * (num_classes - 1):] - y_pred
+            x_abs = K.abs(x)
+            x_bool = K.cast(K.less_equal(x_abs, 1.0), 'float32')
+            return 1 * K.sum(
+                y_true[:, :, :4 * (num_classes - 1)] * (x_bool * (0.5 * x * x) + (1 - x_bool) * (x_abs - 0.5))) / K.sum(
+                epsilon + y_true[:, :, :4 * (num_classes - 1)])
+
+        return class_loss_regr_fixed_num
 
     @staticmethod
     def clf_loss(y_true, y_pred):

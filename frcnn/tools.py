@@ -50,7 +50,8 @@ def cal_fen_output_size(base_name: str, width: int, height: int) -> Tuple[int, i
     elif base_name == 'vgg19':
         return width // 16, height // 16, 512
     elif base_name == 'resnet50':
-        return int(width // 31.19), int(height // 31.19), 2048
+        w, h = calculate_resnet50_output(width, height)
+        return w, h, 512
     elif base_name == 'inception_v3':
         return int(width // 33.35), int(height // 33.35), 2048
     else:
@@ -58,4 +59,33 @@ def cal_fen_output_size(base_name: str, width: int, height: int) -> Tuple[int, i
         raise NotImplementedError(_msg)
 
 
+def calculate_resnet50_output(width, height):
+    def get_output_length(input_length):
+        filter_sizes = [7, 3, 3, 3, 3]
+        stride = 2
+        padding = 2
+        for filter_size in filter_sizes:
+            input_length = (input_length - filter_size + 2 * padding) // stride
 
+        return input_length
+
+    return get_output_length(width), get_output_length(height)
+
+
+def normalize_image(image: np.ndarray) -> np.ndarray:
+    image = image[:, :, (2, 1, 0)]  # BGR -> RGB
+
+    # Transpose the image -> (channel, height, widht)
+    # image = np.transpose(image, (2, 0, 1))
+
+    # Normalize the image
+    image = image - 127
+    return image.copy()
+
+
+def denormalize_image(image: np.ndarray) -> np.ndarray:
+    image = image[:, :, (2, 1, 0)]  # RGB -> BGR
+
+    # Denormalize
+    image += 127
+    return image.copy()

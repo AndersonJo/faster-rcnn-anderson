@@ -35,6 +35,7 @@ class FeatureExtractionNetwork(object):
 
         model = None
         last_tensor = None
+
         if self.base_name == 'vgg16':
             model = VGG16(include_top=False, input_tensor=self.image_input)
             model = Model(self.image_input, model.layers[-2].output)
@@ -47,8 +48,9 @@ class FeatureExtractionNetwork(object):
 
         elif self.base_name == 'resnet50':
             model = ResNet50(include_top=False, input_tensor=self.image_input)
-            model = Model(self.image_input, model.layers[-2].output)
-            last_tensor = model.layers[-1].output
+            model = Model(self.image_input, model.layers[-6].output)
+            last_tensor = model.layers[-6].output
+
         elif self.base_name == 'inception_v3':
             model = InceptionV3(include_top=False, input_tensor=self.image_input)
             last_tensor = model.layers[-1].output

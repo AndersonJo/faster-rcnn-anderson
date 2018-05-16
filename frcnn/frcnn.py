@@ -79,8 +79,6 @@ class FRCNN(object):
         # Transform relative coordinates (tx, ty, tw, th) to absolute coordinates (x, y, w, h)
         anchors, probs = self._generate_anchors(rpn_reg_output, rpn_cls_output)
 
-        # Non Maximum Suppression
-        anchors, probs = non_max_suppression(anchors, probs, overlap_threshold=overlap_threshold, max_box=300)
         return anchors, probs
 
     def _generate_anchors(self, rpn_reg_output: np.ndarray,
@@ -283,6 +281,9 @@ class FRCNN(object):
 
             loss = float(match.group('loss'))
             checkpoints.append((loss, filename))
+
+        lat_loss = None
+        lat_checkpoint = None
 
         if len(checkpoints) >= 1:
             checkpoints = sorted(checkpoints, key=lambda c: c[0])

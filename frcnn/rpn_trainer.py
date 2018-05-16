@@ -8,9 +8,10 @@ import numpy as np
 from frcnn.anchor import to_relative_coord, to_absolute_coord
 from frcnn.augment import augment
 from frcnn.config import singleton_config
+from frcnn.debug import TestRPN
 from frcnn.iou import cal_iou
 from frcnn.logging import get_logger
-from frcnn.tools import cal_rescaled_size, rescale_image, cal_fen_output_size
+from frcnn.tools import cal_rescaled_size, rescale_image, cal_fen_output_size, normalize_image, denormalize_image
 
 logger = get_logger(__name__)
 
@@ -73,29 +74,15 @@ class RPNTargetProcessor(object):
         meta['rescaled_ratio'] = rescaled_ratio
 
         # Post Processing the Image
-        rescaled_image = self.postprocess_image(rescaled_image)
-        return rescaled_image, image
-
-    def postprocess_image(self, image: np.ndarray) -> np.ndarray:
-        """
-        Post-process the rescaled image
-        :param image:
-        :return: post-processed image
-        """
-        # Change color type
-        image = image[:, :, (2, 1, 0)]  # BGR -> RGB
-
-        # Transpose the image -> (channel, height, widht)
-        # image = np.transpose(image, (2, 0, 1))
-
-        # Normalize the image
-        image = image - 127
+        rescaled_image = normalize_image(rescaled_image)
 
         # Expand the dimension
-        image = np.expand_dims(image, axis=0)
-        return image
+        rescaled_image = np.expand_dims(rescaled_image, axis=0)
+        return rescaled_image, image
 
-    def generate_rpn_target(self, meta: dict, image: np.ndarray = None) -> Tuple[np.ndarray, np.ndarray]:
+    def generate_rpn_target(self, meta: dict, image: np.ndarray = None, debug: bool = False) -> Tuple[
+        np.ndarray, np.ndarray]:
+
         width = meta['width']
         height = meta['height']
         rescaled_width = meta['rescaled_width']
@@ -122,9 +109,8 @@ class RPNTargetProcessor(object):
                  range(len(self.anchor_scales)), range(len(self.anchor_ratios)), range(n_object)]
 
         # DEBUG
-        # _image = image[0].copy()
-        # _image = _image[:, :, (2, 1, 0)].astype('uint8').copy()
-        # _image += 127
+        if debug:
+            _image = denormalize_image(image[0].copy())
 
         for y_pos, x_pos, anc_scale_idx, anc_rat_idx, idx_obj in itertools.product(*_comb):
             anc_scale = self.anchor_scales[anc_scale_idx]
@@ -157,6 +143,14 @@ class RPNTargetProcessor(object):
                 best_anchor_for_box[idx_obj] = (y_pos, x_pos, anc_scale_idx, anc_rat_idx)
                 best_reg_for_box[idx_obj] = reg_target
 
+                if debug:
+                    g_cx, g_cy, g_w, g_h = to_absolute_coord(anchor_coord - 8, reg_target)
+                    g_x1 = int(g_cx - g_w / 2)
+                    g_y1 = int(g_cy - g_h / 2)
+                    g_x2 = int(g_x1 + g_w)
+                    g_y2 = int(g_y1 + g_h)
+                    cv2.rectangle(_image, (g_x1, g_y1), (g_x2, g_y2), (255, 255, 0))
+
             # Anchor is positive (the anchor refers to an ground-truth object) if iou > 0.5~0.7
             # is_valid_anchor: this flag prevents overwriting existing valid anchor (due to the for-loop of objects)
             #                  if the anchor meets overlap_max or overlap_min, it should not be changed.
@@ -167,9 +161,9 @@ class RPNTargetProcessor(object):
                 n_pos_anchor_for_box[idx_obj] += 1
                 y_valid_box[y_pos, x_pos, z_pos] = 1
                 y_cls_target[y_pos, x_pos, z_pos] = 1
-                y_regr_targets[y_pos, x_pos, z_pos: z_pos + 4] = reg_target
-                # TestRPN.apply(_image, x_pos, y_pos, anc_scale, anc_rat, reg_target)
-
+                y_regr_targets[y_pos, x_pos, (z_pos * 4): (z_pos * 4) + 4] = reg_target
+                if debug:
+                    TestRPN.apply(_image, x_pos, y_pos, anc_scale, anc_rat, reg_target)
             elif iou < self.min_overlap and not is_valid_anchor:  # Negative anchors
                 y_valid_box[y_pos, x_pos, z_pos] = 1
                 y_cls_target[y_pos, x_pos, z_pos] = 0
@@ -187,12 +181,7 @@ class RPNTargetProcessor(object):
 
                 y_valid_box[y_pos, x_pos, z_pos] = 1
                 y_cls_target[y_pos, x_pos, z_pos] = 1
-                try:
-                    y_regr_targets[y_pos, x_pos, z_pos: z_pos + 4] = reg_target
-                except Exception as e:
-                    print(e)
-                    import ipdb
-                    ipdb.set_trace()
+                y_regr_targets[y_pos, x_pos, (z_pos * 4): (z_pos * 4) + 4] = reg_target
 
         # It is more likely to have more negative anchors than positive anchors.
         # The ratio between negative and positive anchors should be equal.
@@ -216,7 +205,8 @@ class RPNTargetProcessor(object):
         y_regr_targets = np.expand_dims(y_regr_targets, axis=0)
 
         # Debug
-        # cv2.imwrite('temp/' + meta['filename'], _image)
+        if debug:
+            cv2.imwrite('temp/' + meta['filename'], _image)
 
         # Final target data
         # Classification loss in RPN only uses y_valid_box.
@@ -262,10 +252,10 @@ class RPNTargetProcessor(object):
         """
         anc_width, anc_height = anc_scale * anc_rat[0], anc_scale * anc_rat[1]
 
-        x_min = round(stride[0] * x_pos - anc_width / 2)
-        x_max = round(stride[0] * x_pos + anc_width / 2)
-        y_min = round(stride[1] * y_pos - anc_height / 2)
-        y_max = round(stride[1] * y_pos + anc_height / 2)
+        x_min = round(stride[0] * (x_pos + 0.5) - anc_width / 2)
+        x_max = round(stride[0] * (x_pos + 0.5) + anc_width / 2)
+        y_min = round(stride[1] * (y_pos + 0.5) - anc_height / 2)
+        y_max = round(stride[1] * (y_pos + 0.5) + anc_height / 2)
 
         return np.array([x_min, y_min, x_max, y_max])
 
@@ -313,7 +303,7 @@ class RPNTrainer(object):
     def anchor(self) -> RPNTargetProcessor:
         return self._anchor
 
-    def next_batch(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict]:
+    def next_batch(self, debug=False) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict]:
         if self._cur_idx >= self.n_data:
             self._cur_idx = 0
 
@@ -326,7 +316,7 @@ class RPNTrainer(object):
         self._cur_idx += 1
 
         rescaled_image, origial_image = self.anchor.process_image(meta, aug=self._augment)
-        cls_target, reg_target, = self.anchor.generate_rpn_target(meta, rescaled_image)
+        cls_target, reg_target, = self.anchor.generate_rpn_target(meta, rescaled_image, debug=debug)
         return rescaled_image, origial_image, cls_target, reg_target, meta
 
     def count(self):

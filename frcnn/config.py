@@ -26,12 +26,13 @@ class Config:
                      [2. / math.sqrt(2), 1. / math.sqrt(2)]]
 
     # anchor stride of x and y
+    # it depends on FEN
     anchor_stride = [16, 16]
 
     ###################################
     # BaseNetwork
     ###################################
-    net_name = 'vgg16'
+    net_name = 'vgg19'
 
     ###################################
     # Region Proposal Network & Anchor
@@ -56,7 +57,7 @@ class Config:
     # Classifier Network
     ###################################
     clf_min_overlap = 0.1
-    clf_max_overlap = 0.6
+    clf_max_overlap = 0.7
     clf_regr_std = [8., 8., 4., 4.]
 
     ###################################

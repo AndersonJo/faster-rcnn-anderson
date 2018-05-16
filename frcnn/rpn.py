@@ -77,7 +77,7 @@ class RegionProposalNetwork(object):
         def log_loss(y_true, y_pred):
             y_true = y_true[:, :, :, :n_anchor]
 
-            cross_entorpy = K.binary_crossentropy(y_true, y_pred)
+            cross_entorpy = K.binary_crossentropy(y_pred, y_true)
             loss = K.sum(y_true * cross_entorpy) / (K.sum(y_true) + epsilon)
 
             self.tensors['cls_y_true'] = y_true
@@ -103,12 +103,12 @@ class RegionProposalNetwork(object):
         def smooth_l1(y_true, y_pred):
             reg_y = y_true[:, :, :, 4 * n_anchor:]
 
-            cond = tf.equal(reg_y, tf.constant(0.))
-            cls_y = tf.where(cond, tf.zeros_like(reg_y), tf.ones_like(reg_y))
+            # cond = tf.equal(reg_y, tf.constant(0.))
+            # cls_y = tf.where(cond, tf.zeros_like(reg_y), tf.ones_like(reg_y))
             # cls_y = K.print_tensor(cls_y, 'cls_y')
             # cls_y = tf.Print(cls_y, [cls_y], 'cls_y', first_n=100)
 
-            # cls_y2 = y_true[:, :, :, :4 * n_anchor]
+            cls_y = y_true[:, :, :, :4 * n_anchor]
 
             h1 = K.abs(reg_y - y_pred)
             h2 = K.switch(h1 < huber_delta, 0.5 * h1 ** 2, h1 - 0.5 * huber_delta)
@@ -117,7 +117,7 @@ class RegionProposalNetwork(object):
             self.tensors['reg_y_true'] = y_true
             self.tensors['reg_y_pred'] = y_pred
             self.tensors['reg_reg_y'] = reg_y
-            self.tensors['reg_cond'] = cond
+            # self.tensors['reg_cond'] = cond
             self.tensors['reg_cls_y'] = cls_y
             # self.tensors['reg_cls_y2'] = cls_y2
             self.tensors['reg_h1'] = h1

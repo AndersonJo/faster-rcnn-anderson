@@ -29,18 +29,16 @@ class RPNTrainerDebug:
         cls_h, cls_w, cls_o = np.where(cls[0, :, :, 9:] == 1)
         reg = reg[0].copy()
 
+        import ipdb
+        ipdb.set_trace()
         for i in range(len(cls_h)):
             loc_w = cls_w[i]
             loc_h = cls_h[i]
             loc_o = cls_o[i]
 
-            cw = (loc_w + 0.5) * config.anchor_stride[0]
-            ch = (loc_h + 0.5) * config.anchor_stride[1]
+            cw = (loc_w + 0.5) #* config.anchor_stride[0]
+            ch = (loc_h + 0.5) #* config.anchor_stride[1]
             w, h = scales[loc_o]
-
-            cw = int(cw)
-            ch = int(ch)
-            cv2.rectangle(image, (cw, ch), (cw + 5, ch + 5), (0, 255, 255))
 
             tx, ty, tw, th = reg[loc_h, loc_w, (loc_o * 4) + 36:(loc_o * 4) + 4 + 36]
             min_x = cw - w / 2
@@ -60,8 +58,8 @@ class RPNTrainerDebug:
             g_y2 = int(g_cy + g_h / 2)
 
             # print(min_x, min_y, max_x, max_y, 'sxxxxxxxx', g_x1, g_y1, g_x2, g_y2)
-            # cv2.rectangle(image, (g_x1, g_y1), (g_x1 + 5, g_y1 + 5), (255, 255, 0))
-            # cv2.rectangle(image, (g_x2, g_y2), (g_x2 + 5, g_y2 + 5), (0, 255, 255))
+            cv2.rectangle(image, (g_x1, g_y1), (g_x1 + 5, g_y1 + 5), (255, 255, 0))
+            cv2.rectangle(image, (g_x2, g_y2), (g_x2 + 5, g_y2 + 5), (0, 255, 255))
 
         # Ground Truth
         for name, x1, y1, x2, y2 in meta['objects']:
