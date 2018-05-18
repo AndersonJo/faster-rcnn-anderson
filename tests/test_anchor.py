@@ -13,8 +13,16 @@ def test_anchor():
     anchor_scales = config.anchor_scales
     n_ratio = len(anchor_ratios)
 
+    config = singleton_config()
+    scales = [scale * np.array(config.anchor_ratios) for scale in config.anchor_scales]
+    scales = np.array(scales).reshape(9, 2)
+
     _comb = [range(len(anchor_scales)), range(len(anchor_ratios))]
 
-    for anc_scale_idx, anc_rat_idx in itertools.product(*_comb):
-        z_pos = 4 * (anc_rat_idx + n_ratio * anc_scale_idx)
-        print(anc_scale_idx, anc_rat_idx, z_pos)
+    for i, (anc_scale_idx, anc_rat_idx) in enumerate(itertools.product(*_comb)):
+        anc_scale = config.anchor_scales[anc_scale_idx]
+        anc_rat = config.anchor_ratios[anc_rat_idx]
+
+        print(scales[i], 'xxxxxx', anc_scale * anc_rat[0], anc_scale * anc_rat[1])
+
+        print()

@@ -11,7 +11,6 @@ from frcnn.classifier import ClassifierNetwork
 from frcnn.config import Config
 from frcnn.fen import FeatureExtractionNetwork
 from frcnn.logging import get_logger
-from frcnn.nms import non_max_suppression
 from frcnn.rpn import RegionProposalNetwork
 
 logger = get_logger(__name__)
@@ -63,26 +62,7 @@ class FRCNN(object):
     def clf_model(self) -> Model:
         return self.clf.model
 
-    def generate_anchors(self, rpn_cls_output: np.ndarray, rpn_reg_output: np.ndarray,
-                         overlap_threshold=0.9) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Generate Anchors on feature maps and then Do Non Maximum Suppression.
-
-        :param rpn_cls_output: (batch, fh, fw, 9)
-        :param rpn_reg_output: (batch, fh, fw, 36) and each regression is (tx, ty, tw, th)
-        :param overlap_threshold : used for Non Max Suppression
-        :return
-            - anchors: anchors picked by NMS. (None, (min_x, min_y, max_x, max_y))
-            - probs: classification probability vector (is it object or not?)
-        """
-        # Transform the shape of RPN outputs to (None, 4) regression
-        # Transform relative coordinates (tx, ty, tw, th) to absolute coordinates (x, y, w, h)
-        anchors, probs = self._generate_anchors(rpn_reg_output, rpn_cls_output)
-
-        return anchors, probs
-
-    def _generate_anchors(self, rpn_reg_output: np.ndarray,
-                          rpn_cls_output: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def generate_anchors(self, rpn_cls_output: np.ndarray, rpn_reg_output: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         The method do the followings
             1. Create Anchors on the basis of feature maps
@@ -272,6 +252,30 @@ class FRCNN(object):
         self._model_all.save_weights(filepath)
         logger.info('saved ' + filepath)
 
+    def load_latest_model(self) -> Tuple[float, str]:
+        checkpoints = list()
+        for filename in os.listdir('checkpoints'):
+            match = re.match(self.CHECKPOINT_REGEX, filename)
+            if match is None:
+                continue
+
+            step = float(match.group('step'))
+            checkpoints.append((step, filename))
+
+        lat_step = 0
+        lat_checkpoint = None
+
+        if len(checkpoints) >= 1:
+            checkpoints = sorted(checkpoints, key=lambda c: c[0])
+            lat_step, lat_checkpoint = checkpoints[-1]
+
+            self.load(os.path.join('checkpoints', lat_checkpoint))
+            logger.info('loaded latest checkpoint - ' + lat_checkpoint)
+        else:
+            logger.info('no checkpoint')
+
+        return lat_step, lat_checkpoint
+
     def load_most_accurate_model(self) -> Tuple[float, str]:
         checkpoints = list()
         for filename in os.listdir('checkpoints'):
@@ -290,7 +294,7 @@ class FRCNN(object):
             lat_loss, lat_checkpoint = checkpoints[0]
 
             self.load(os.path.join('checkpoints', lat_checkpoint))
-            logger.info('loaded latest checkpoint - ' + lat_checkpoint)
+            logger.info('loaded most accurate checkpoint - ' + lat_checkpoint)
         else:
             logger.info('no checkpoint')
 

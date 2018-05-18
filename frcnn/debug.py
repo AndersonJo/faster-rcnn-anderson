@@ -26,7 +26,7 @@ class RPNTrainerDebug:
         fen_w, fen_h, _ = cal_fen_output_size('vgg19', width, height)
 
         # Check Classification
-        cls_h, cls_w, cls_o = np.where(cls[0, :, :, 9:] == 1)
+        cls_h, cls_w, cls_o = np.where(np.logical_and(cls[0, :, :, :9] == 1, cls[0, :, :, 9:] == 1))
         reg = reg[0].copy()
 
         for i in range(len(cls_h)):
@@ -40,9 +40,8 @@ class RPNTrainerDebug:
 
             cw = int(cw)
             ch = int(ch)
-            cv2.rectangle(image, (cw, ch), (cw + 5, ch + 5), (0, 255, 255))
+            # cv2.rectangle(image, (cw, ch), (cw + 5, ch + 5), (0, 255, 255))
 
-            tx, ty, tw, th = reg[loc_h, loc_w, (loc_o * 4) + 36:(loc_o * 4) + 4 + 36]
             min_x = cw - w / 2
             min_y = ch - h / 2
             max_x = cw + w / 2
@@ -53,13 +52,19 @@ class RPNTrainerDebug:
             max_x = int(max_x)
             max_y = int(max_y)
 
+            cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (0, 255, 255))
+            # cv2.rectangle(image, (min_x, min_y), (min_x+5, min_y+5), (0, 255, 255))
+            # cv2.rectangle(image, (max_x, max_y), (max_x + 5, max_y + 5), (255, 255, 0))
+
+            tx, ty, tw, th = reg[loc_h, loc_w, (loc_o * 4) + 36:(loc_o * 4) + 4 + 36]
             g_cx, g_cy, g_w, g_h = to_absolute_coord([min_x, min_y, max_x, max_y], [tx, ty, tw, th])
             g_x1 = int(g_cx - g_w / 2)
             g_y1 = int(g_cy - g_h / 2)
-            g_x2 = int(g_cx + g_w / 2)
-            g_y2 = int(g_cy + g_h / 2)
+            g_x2 = int(g_x1 + g_w)
+            g_y2 = int(g_y1 + g_h)
 
             # print(min_x, min_y, max_x, max_y, 'sxxxxxxxx', g_x1, g_y1, g_x2, g_y2)
+            # cv2.rectangle(image, (g_x1, g_y1), (g_x2, g_y2), (255, 255, 0))
             # cv2.rectangle(image, (g_x1, g_y1), (g_x1 + 5, g_y1 + 5), (255, 255, 0))
             # cv2.rectangle(image, (g_x2, g_y2), (g_x2 + 5, g_y2 + 5), (0, 255, 255))
 
@@ -74,7 +79,7 @@ class RPNTrainerDebug:
             y1 = int(y1)
             x2 = int(x2)
             y2 = int(y2)
-            cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255))
+            cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), thickness=2)
 
         cv2.imwrite('temp/' + meta['filename'], image)
 

@@ -52,26 +52,26 @@ K.set_session(sess)
 def train_voc(config: Config, train: list, class_mapping: dict):
     inv_class_mapping = {v: k for k, v in class_mapping.items()}
 
+    # Parameters
+    best_loss = np.inf
+    global_step = 0
+
     # Load training tools
     rpn_trainer = RPNTrainer(train, shuffle=True, augment=True)
     clf_trainer = ClassifierTrainer(config, class_mapping)
 
     # Create Model
     frcnn = FRCNN(config, class_mapping, train=True)
-    frcnn.load_most_accurate_model()
+    global_step, _ = frcnn.load_latest_model()
 
     # Progress Bar
     progbar = Progbar(len(train), width=20, stateful_metrics=['iou', 'gta'])
-
-    # Parameters
-    best_loss = np.inf
-    global_step = 0
 
     for epoch in range(100):
         for step in range(len(train)):
             batch_image, original_image, batch_cls, batch_regr, meta = rpn_trainer.next_batch(debug=False)
             # DEBUG RPN Trainer
-            # RPNTrainerDebug.debug_next_batch(batch_image[0].copy(), meta, batch_cls, batch_regr)
+            RPNTrainerDebug.debug_next_batch(batch_image[0].copy(), meta, batch_cls, batch_regr)
 
             # Train Region Proposal Network
             rpn_loss = frcnn.rpn_model.train_on_batch(batch_image, [batch_cls, batch_regr])
@@ -85,7 +85,6 @@ def train_voc(config: Config, train: list, class_mapping: dict):
 
             # DEBUG Anchors
             # FRCNNDebug.debug_generate_anchors(anchors, probs, batch_image[0].copy(), meta, )
-
             rois, cls_y, reg_y, best_ious = clf_trainer.next_batch(anchors, meta, image=batch_image[0].copy(),
                                                                    debug_image=False, )
 
@@ -140,7 +139,7 @@ def test_voc(config: Config, test: list, class_mapping: dict):
 
     # Create Model
     frcnn = FRCNN(config, class_mapping)
-    frcnn.load_most_accurate_model()
+    frcnn.load_latest_model()
 
     # Inference
     for step in range(rpn_data.count()):
@@ -157,8 +156,7 @@ def test_voc(config: Config, test: list, class_mapping: dict):
         cls_indices, gta_regs = frcnn.clf_predict(batch_image, anchors, img_meta=meta)
         gta_regs, cls_indices = non_max_suppression(gta_regs, cls_indices, overlap_threshold=0.5)
         if gta_regs is not None:
-            pass
-            # visualize(original_image, meta, gta_regs)
+            visualize(original_image, meta, gta_regs)
 
 
 def visualize(image, meta, gta_regs: np.ndarray):

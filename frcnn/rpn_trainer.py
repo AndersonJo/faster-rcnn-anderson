@@ -120,6 +120,9 @@ class RPNTargetProcessor(object):
             obj_info = meta['objects'][idx_obj]
             gta_coord = self.cal_gta_coordinate(obj_info[1:], width, height, rescaled_width, rescaled_height)
 
+            if debug:
+                cv2.rectangle(_image, (gta_coord[0], gta_coord[1]), (gta_coord[2], gta_coord[3]), (0, 0, 255))
+
             # anchor box coordinates on the rescaled image
             anchor_coord = self.cal_anchor_cooridinate(x_pos, y_pos, anc_scale, anc_rat, self.anchor_stride)
 
@@ -143,13 +146,13 @@ class RPNTargetProcessor(object):
                 best_anchor_for_box[idx_obj] = (y_pos, x_pos, anc_scale_idx, anc_rat_idx)
                 best_reg_for_box[idx_obj] = reg_target
 
-                if debug:
-                    g_cx, g_cy, g_w, g_h = to_absolute_coord(anchor_coord - 8, reg_target)
-                    g_x1 = int(g_cx - g_w / 2)
-                    g_y1 = int(g_cy - g_h / 2)
-                    g_x2 = int(g_x1 + g_w)
-                    g_y2 = int(g_y1 + g_h)
-                    cv2.rectangle(_image, (g_x1, g_y1), (g_x2, g_y2), (255, 255, 0))
+                # if debug:
+                #     g_cx, g_cy, g_w, g_h = to_absolute_coord(anchor_coord , reg_target)
+                #     g_x1 = int(g_cx - g_w / 2)
+                #     g_y1 = int(g_cy - g_h / 2)
+                #     g_x2 = int(g_x1 + g_w)
+                #     g_y2 = int(g_y1 + g_h)
+                #     cv2.rectangle(_image, (g_x1+2, g_y1+2), (g_x2+2, g_y2+2), (255, 255, 0))
 
             # Anchor is positive (the anchor refers to an ground-truth object) if iou > 0.5~0.7
             # is_valid_anchor: this flag prevents overwriting existing valid anchor (due to the for-loop of objects)
@@ -162,8 +165,17 @@ class RPNTargetProcessor(object):
                 y_valid_box[y_pos, x_pos, z_pos] = 1
                 y_cls_target[y_pos, x_pos, z_pos] = 1
                 y_regr_targets[y_pos, x_pos, (z_pos * 4): (z_pos * 4) + 4] = reg_target
+                # if debug:
+                #     TestRPN.apply(_image, x_pos, y_pos, anc_scale, anc_rat, reg_target)
+
                 if debug:
-                    TestRPN.apply(_image, x_pos, y_pos, anc_scale, anc_rat, reg_target)
+                    g_cx, g_cy, g_w, g_h = to_absolute_coord(anchor_coord , reg_target)
+                    g_x1 = int(g_cx - g_w / 2)
+                    g_y1 = int(g_cy - g_h / 2)
+                    g_x2 = int(g_x1 + g_w)
+                    g_y2 = int(g_y1 + g_h)
+                    cv2.rectangle(_image, (g_x1+2, g_y1+2), (g_x2+2, g_y2+2), (255, 255, 0))
+
             elif iou < self.min_overlap and not is_valid_anchor:  # Negative anchors
                 y_valid_box[y_pos, x_pos, z_pos] = 1
                 y_cls_target[y_pos, x_pos, z_pos] = 0
