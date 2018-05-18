@@ -7,6 +7,7 @@ import numpy as np
 
 from frcnn.anchor import to_absolute_coord
 from frcnn.config import singleton_config
+from frcnn.iou import cal_iou
 from frcnn.tools import denormalize_image, cal_fen_output_size
 
 
@@ -23,50 +24,7 @@ class RPNTrainerDebug:
         width_ratio = meta['rescaled_width'] / meta['width']
         height_ratio = meta['rescaled_height'] / meta['height']
 
-        fen_w, fen_h, _ = cal_fen_output_size('vgg19', width, height)
-
-        # Check Classification
-        cls_h, cls_w, cls_o = np.where(np.logical_and(cls[0, :, :, :9] == 1, cls[0, :, :, 9:] == 1))
-        reg = reg[0].copy()
-
-        for i in range(len(cls_h)):
-            loc_w = cls_w[i]
-            loc_h = cls_h[i]
-            loc_o = cls_o[i]
-
-            cw = (loc_w + 0.5) * config.anchor_stride[0]
-            ch = (loc_h + 0.5) * config.anchor_stride[1]
-            w, h = scales[loc_o]
-
-            cw = int(cw)
-            ch = int(ch)
-            # cv2.rectangle(image, (cw, ch), (cw + 5, ch + 5), (0, 255, 255))
-
-            min_x = cw - w / 2
-            min_y = ch - h / 2
-            max_x = cw + w / 2
-            max_y = ch + w / 2
-
-            min_x = int(min_x)
-            min_y = int(min_y)
-            max_x = int(max_x)
-            max_y = int(max_y)
-
-            cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (0, 255, 255))
-            # cv2.rectangle(image, (min_x, min_y), (min_x+5, min_y+5), (0, 255, 255))
-            # cv2.rectangle(image, (max_x, max_y), (max_x + 5, max_y + 5), (255, 255, 0))
-
-            tx, ty, tw, th = reg[loc_h, loc_w, (loc_o * 4) + 36:(loc_o * 4) + 4 + 36]
-            g_cx, g_cy, g_w, g_h = to_absolute_coord([min_x, min_y, max_x, max_y], [tx, ty, tw, th])
-            g_x1 = int(g_cx - g_w / 2)
-            g_y1 = int(g_cy - g_h / 2)
-            g_x2 = int(g_x1 + g_w)
-            g_y2 = int(g_y1 + g_h)
-
-            # print(min_x, min_y, max_x, max_y, 'sxxxxxxxx', g_x1, g_y1, g_x2, g_y2)
-            # cv2.rectangle(image, (g_x1, g_y1), (g_x2, g_y2), (255, 255, 0))
-            # cv2.rectangle(image, (g_x1, g_y1), (g_x1 + 5, g_y1 + 5), (255, 255, 0))
-            # cv2.rectangle(image, (g_x2, g_y2), (g_x2 + 5, g_y2 + 5), (0, 255, 255))
+        # fen_w, fen_h, _ = cal_fen_output_size('vgg19', width, height)
 
         # Ground Truth
         for name, x1, y1, x2, y2 in meta['objects']:
@@ -80,6 +38,61 @@ class RPNTrainerDebug:
             x2 = int(x2)
             y2 = int(y2)
             cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), thickness=2)
+
+        # Check Classification
+        cls_h, cls_w, cls_o = np.where(np.logical_and(cls[0, :, :, :9] == 1, cls[0, :, :, 9:] == 1))
+        reg = reg[0].copy()
+
+        for i in range(len(cls_h)):
+            loc_w = cls_w[i]
+            loc_h = cls_h[i]
+            loc_o = cls_o[i]
+
+            cw = (loc_w + 0.5) * config.anchor_stride[0]
+            ch = (loc_h + 0.5) * config.anchor_stride[1]
+
+            anc_w, anc_h = scales[loc_o]
+
+            cw = int(cw)
+            ch = int(ch)
+            cv2.rectangle(image, (cw, ch), (cw + 5, ch + 5), (0, 255, 255))
+
+            min_x = cw - anc_w / 2
+            min_y = ch - anc_h / 2
+            max_x = cw + anc_w / 2
+            max_y = ch + anc_h / 2
+
+            min_x = int(min_x)
+            min_y = int(min_y)
+            max_x = int(max_x)
+            max_y = int(max_y)
+
+            # anc_width, anc_height = anc_scale * anc_rat[0], anc_scale * anc_rat[1]
+            #
+            # x_min = round(stride[0] * (x_pos + 0.5) - anc_width / 2)
+            # x_max = round(stride[0] * (x_pos + 0.5) + anc_width / 2)
+            # y_min = round(stride[1] * (y_pos + 0.5) - anc_height / 2)
+            # y_max = round(stride[1] * (y_pos + 0.5) + anc_height / 2)
+
+            # cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (0, 255, 255))
+            # cv2.rectangle(image, (min_x, min_y), (min_x+5, min_y+5), (0, 255, 255))
+            # cv2.rectangle(image, (max_x, max_y), (max_x + 5, max_y + 5), (255, 255, 0))
+
+            tx, ty, tw, th = reg[loc_h, loc_w, (loc_o * 4) + 36:(loc_o * 4) + 4 + 36]
+            print(reg[loc_h, loc_w])
+            g_cx, g_cy, g_w, g_h = to_absolute_coord([min_x, min_y, max_x, max_y], [tx, ty, tw, th])
+            g_x1 = int(g_cx - g_w / 2)
+            g_y1 = int(g_cy - g_h / 2)
+            g_x2 = int(g_x1 + g_w)
+            g_y2 = int(g_y1 + g_h)
+
+            # print(min_x, min_y, max_x, max_y, 'sxxxxxxxx', g_x1, g_y1, g_x2, g_y2)
+            cv2.rectangle(image, (g_x1, g_y1), (g_x2, g_y2), (255, 255, 0), thickness=3)
+            # cv2.rectangle(image, (g_x1, g_y1), (g_x1 + 5, g_y1 + 5), (255, 255, 0))
+            # cv2.rectangle(image, (g_x2, g_y2), (g_x2 + 5, g_y2 + 5), (0, 255, 255))
+            cv2.imwrite('temp/' + meta['filename'], image)
+            import ipdb
+            ipdb.set_trace()
 
         cv2.imwrite('temp/' + meta['filename'], image)
 

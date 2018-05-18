@@ -92,7 +92,7 @@ class RPNTargetProcessor(object):
         n_anchor = len(self.anchor_ratios) * len(self.anchor_scales)
 
         # Calculate output size of Base Network (feature extraction model)
-        output_width, output_height, _ = cal_fen_output_size(self._net_name, rescaled_width, rescaled_height)
+        fen_width, fen_height, _ = cal_fen_output_size(self._net_name, rescaled_width, rescaled_height)
 
         # Tracking best things
         best_iou_for_box = np.zeros(n_object)
@@ -101,11 +101,11 @@ class RPNTargetProcessor(object):
         n_pos_anchor_for_box = np.zeros(n_object)
 
         # Classification Target Data
-        y_cls_target = np.zeros((output_height, output_width, n_anchor))
-        y_valid_box = np.zeros((output_height, output_width, n_anchor))
-        y_regr_targets = np.zeros((output_height, output_width, n_anchor * 4))
+        y_cls_target = np.zeros((fen_height, fen_width, n_anchor))
+        y_valid_box = np.zeros((fen_height, fen_width, n_anchor))
+        y_regr_targets = np.zeros((fen_height, fen_width, n_anchor * 4))
 
-        _comb = [range(output_height), range(output_width),
+        _comb = [range(fen_height), range(fen_width),
                  range(len(self.anchor_scales)), range(len(self.anchor_ratios)), range(n_object)]
 
         # DEBUG
@@ -133,6 +133,16 @@ class RPNTargetProcessor(object):
 
             # Calculate Intersection Over Union
             iou = cal_iou(gta_coord, anchor_coord)
+
+            # DEBUG
+            # r = np.random.randint(4, size=4)
+            # reg_target = to_relative_coord(gta_coord, anchor_coord)
+            # g_cx, g_cy, g_w, g_h = to_absolute_coord(anchor_coord, reg_target)
+            # g_x1 = int(g_cx - g_w / 2)
+            # g_y1 = int(g_cy - g_h / 2)
+            # g_x2 = int(g_x1 + g_w)
+            # g_y2 = int(g_y1 + g_h)
+            # cv2.rectangle(_image, (g_x1 + 2 + r[0], g_y1 + 2 + r[1]), (g_x2 + 2 + r[2], g_y2 + 2 + r[3]), (255, 255, 0))
 
             # Calculate regression target
             if iou > best_iou_for_box[idx_obj] or iou > self.max_overlap:
@@ -168,13 +178,13 @@ class RPNTargetProcessor(object):
                 # if debug:
                 #     TestRPN.apply(_image, x_pos, y_pos, anc_scale, anc_rat, reg_target)
 
-                if debug:
-                    g_cx, g_cy, g_w, g_h = to_absolute_coord(anchor_coord , reg_target)
-                    g_x1 = int(g_cx - g_w / 2)
-                    g_y1 = int(g_cy - g_h / 2)
-                    g_x2 = int(g_x1 + g_w)
-                    g_y2 = int(g_y1 + g_h)
-                    cv2.rectangle(_image, (g_x1+2, g_y1+2), (g_x2+2, g_y2+2), (255, 255, 0))
+                # if debug:
+                #     g_cx, g_cy, g_w, g_h = to_absolute_coord(anchor_coord, reg_target)
+                #     g_x1 = int(g_cx - g_w / 2)
+                #     g_y1 = int(g_cy - g_h / 2)
+                #     g_x2 = int(g_x1 + g_w)
+                #     g_y2 = int(g_y1 + g_h)
+                #     cv2.rectangle(_image, (g_x1 + 2, g_y1 + 2), (g_x2 + 2, g_y2 + 2), (255, 255, 0))
 
             elif iou < self.min_overlap and not is_valid_anchor:  # Negative anchors
                 y_valid_box[y_pos, x_pos, z_pos] = 1
@@ -186,7 +196,7 @@ class RPNTargetProcessor(object):
 
         # Ensure a ground-truth bounding box is mapped to at least one anchor
         for i in range(n_object):
-            if n_pos_anchor_for_box[i] == 0:
+            if n_pos_anchor_for_box[i] == 0 or True:
                 y_pos, x_pos, anc_scale_idx, anc_rat_idx = best_anchor_for_box[i]
                 z_pos = anc_scale_idx + n_ratio * anc_rat_idx
                 reg_target = best_reg_for_box[i]
@@ -194,6 +204,17 @@ class RPNTargetProcessor(object):
                 y_valid_box[y_pos, x_pos, z_pos] = 1
                 y_cls_target[y_pos, x_pos, z_pos] = 1
                 y_regr_targets[y_pos, x_pos, (z_pos * 4): (z_pos * 4) + 4] = reg_target
+
+                # if debug:
+                #     anc_scale = self.anchor_scales[anc_scale_idx]
+                #     anc_rat = self.anchor_ratios[anc_rat_idx]
+                #     anchor_coord = self.cal_anchor_cooridinate(x_pos, y_pos, anc_scale, anc_rat, self.anchor_stride)
+                #     g_cx, g_cy, g_w, g_h = to_absolute_coord(anchor_coord, reg_target)
+                #     g_x1 = int(g_cx - g_w / 2)
+                #     g_y1 = int(g_cy - g_h / 2)
+                #     g_x2 = int(g_x1 + g_w)
+                #     g_y2 = int(g_y1 + g_h)
+                #     cv2.rectangle(_image, (g_x1 + 2, g_y1 + 2), (g_x2 + 2, g_y2 + 2), (255, 255, 0))
 
         # It is more likely to have more negative anchors than positive anchors.
         # The ratio between negative and positive anchors should be equal.
@@ -218,6 +239,8 @@ class RPNTargetProcessor(object):
 
         # Debug
         if debug:
+            print(np.unique(_anchors_debug, axis=0).shape)
+            print('count:', count)
             cv2.imwrite('temp/' + meta['filename'], _image)
 
         # Final target data
