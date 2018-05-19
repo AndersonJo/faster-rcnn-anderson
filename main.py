@@ -74,9 +74,9 @@ def train_voc(config: Config, train: list, class_mapping: dict):
 
             # Train Classifier Network
             rpn_cls, rpn_reg = frcnn.rpn_model.predict_on_batch(batch_image)
-            anchors, probs = frcnn.generate_anchors(rpn_cls, rpn_reg, batch_cls, batch_regr, debug=True)
+            anchors, probs = frcnn.generate_anchors(rpn_cls, rpn_reg, batch_cls, batch_regr, debug=False)
             anchors, probs = non_max_suppression(anchors, probs, overlap_threshold=0.9, max_box=300)
-            FRCNNDebug.debug_generate_anchors(batch_image[0].copy(), meta, anchors, probs, batch_cls, batch_regr)
+            # FRCNNDebug.debug_generate_anchors(batch_image[0].copy(), meta, anchors, probs, batch_cls, batch_regr)
 
             rois, cls_y, reg_y, best_ious = clf_trainer.next_batch(anchors, meta, image=batch_image[0].copy(),
                                                                    debug_image=False, )

@@ -154,16 +154,16 @@ class FRCNNDebug:
         for anchor, prob in zip(anchors, probs):
             min_x = anchor[0] * config.anchor_stride[0]
             min_y = anchor[1] * config.anchor_stride[1]
-            max_x = anchor[2] * config.anchor_stride[0] + min_x
-            max_y = anchor[3] * config.anchor_stride[1] + min_y
+            max_x = anchor[2] * config.anchor_stride[0]
+            max_y = anchor[3] * config.anchor_stride[1]
             cx = (min_x + max_x) // 2
             cy = (min_y + max_y) // 2
 
-            if prob == 0:
-                continue
-
             cv2.rectangle(image, (cx, cy), (cx + 5, cy + 5), (255, 0, 255))
-            # cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (255 * prob, 255 * prob, 0))
+            if prob > 0.7:
+                cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (255 * prob, 255 * prob, 0), thickness=2)
+            else:
+                cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (0, 0, 0), thickness=1)
 
         cv2.imwrite(os.path.join('temp', meta['filename']), image)
 

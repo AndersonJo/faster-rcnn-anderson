@@ -75,14 +75,16 @@ class RegionProposalNetwork(object):
         """
 
         def log_loss(y_true, y_pred):
-            y_true = y_true[:, :, :, :n_anchor]
+            cls_y = y_true[:, :, :, n_anchor:]  # Positive objects!
+            valid_y = y_true[:, :, :, :n_anchor]  # Positive objects! + Negative objects!
 
-            cross_entorpy = K.binary_crossentropy(y_pred, y_true)
-            loss = K.sum(y_true * cross_entorpy) / (K.sum(y_true) + epsilon)
+            cross_entropy = valid_y * K.binary_crossentropy(y_pred, cls_y)
+            normalized = cross_entropy / (K.sum(valid_y) + epsilon)
+            loss = K.sum(normalized)
 
             self.tensors['cls_y_true'] = y_true
             self.tensors['cls_y_pred'] = y_pred
-            self.tensors['cls_cross_entorpy'] = cross_entorpy
+            self.tensors['cls_cross_entropy'] = cross_entropy
             self.tensors['cls_loss'] = loss
             return lambda_cls * loss
 

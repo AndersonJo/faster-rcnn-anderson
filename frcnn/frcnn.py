@@ -82,8 +82,7 @@ class FRCNN(object):
             - probs: classification probabilities (object or background)
         """
         if debug:
-            print('디버깅중이야 맞어')
-            rpn_cls_output = cls_y[:, :, :, :9]
+            rpn_cls_output = cls_y[:, :, :, 9:]
             rpn_reg_output = reg_y[:, :, :, 36:]
 
         anchor_scales = self.clf.anchor_scales
