@@ -62,7 +62,9 @@ class FRCNN(object):
     def clf_model(self) -> Model:
         return self.clf.model
 
-    def generate_anchors(self, rpn_cls_output: np.ndarray, rpn_reg_output: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def generate_anchors(self, rpn_cls_output: np.ndarray, rpn_reg_output: np.ndarray,
+                         cls_y: np.ndarray = None, reg_y: np.ndarray = None,
+                         debug=False) -> Tuple[np.ndarray, np.ndarray]:
         """
         The method do the followings
             1. Create Anchors on the basis of feature maps
@@ -79,47 +81,53 @@ class FRCNN(object):
             - anchors: (min_x, min_y, max_x, max_y)
             - probs: classification probabilities (object or background)
         """
+        if debug:
+            print('디버깅중이야 맞어')
+            rpn_cls_output = cls_y[:, :, :, :9]
+            rpn_reg_output = reg_y[:, :, :, 36:]
+
         anchor_scales = self.clf.anchor_scales
         anchor_ratios = self.clf.anchor_ratios
+        n_scales = len(anchor_scales)
+        n_ratios = len(anchor_ratios)
         _, fh, fw, n_anchor = rpn_cls_output.shape  # shape example (1, 37, 50, 9)
 
         anchors = np.zeros((4, fh, fw, n_anchor), dtype='int8')
-
-        cur_anchor = 0
-        for anchor_size in anchor_scales:
-            for anchor_ratio in anchor_ratios:
+        for anchor_ratio_idx in range(n_ratios):
+            for anchor_scale_idx in range(n_scales):
                 # anchor_width: Anchor's width on feature maps
-                #           For example, the sub-sampling ratio of VGG-16 is 16.
-                #           That is, the size of original image decrease in the ratio 6 to 1
+                #               For example, the sub-sampling ratio of VGG-16 is 16.
+                #               That is, the size of original image decrease in the ratio 6 to 1
                 # anchor_height: Anchor's height
-                anchor_width = (anchor_size * anchor_ratio[0]) / self.clf.anchor_stride[0]
-                anchor_height = (anchor_size * anchor_ratio[1]) / self.clf.anchor_stride[1]
+                anchor_scale = anchor_scales[anchor_scale_idx]
+                anchor_ratio = anchor_ratios[anchor_ratio_idx]
+                anchor_width = (anchor_scale * anchor_ratio[0]) / self.clf.anchor_stride[0]
+                anchor_height = (anchor_scale * anchor_ratio[1]) / self.clf.anchor_stride[1]
+                anc_idx = anchor_scale_idx + n_ratios * anchor_ratio_idx
 
-                regr = rpn_reg_output[0, :, :, cur_anchor * 4: cur_anchor * 4 + 4]  # ex. (37, 50, 4)
+                regr = rpn_reg_output[0, :, :, anc_idx * 4: anc_idx * 4 + 4]  # ex. (37, 50, 4)
                 regr = np.transpose(regr, (2, 0, 1))  # (4, 37, 50)
 
                 X, Y = np.meshgrid(np.arange(fw), np.arange(fh))
-                anchors[0, :, :, cur_anchor] = X  # the center coordinate of anchor's width (37, 50)
-                anchors[1, :, :, cur_anchor] = Y  # the center coordinate of anchor's height (37, 50)
-                anchors[2, :, :, cur_anchor] = anchor_width  # anchor width <scalar value>
-                anchors[3, :, :, cur_anchor] = anchor_height  # anchor height <scalar value>
-                anchors[:, :, :, cur_anchor] = to_absolute_coord_np(anchors[:, :, :, cur_anchor], regr)
+                anchors[0, :, :, anc_idx] = X  # the center coordinate of anchor's width (37, 50)
+                anchors[1, :, :, anc_idx] = Y  # the center coordinate of anchor's height (37, 50)
+                anchors[2, :, :, anc_idx] = anchor_width  # anchor width <scalar value>
+                anchors[3, :, :, anc_idx] = anchor_height  # anchor height <scalar value>
+                anchors[:, :, :, anc_idx] = to_absolute_coord_np(anchors[:, :, :, anc_idx], regr)
 
                 # it makes sure that anchors' width and height are at least 1
                 # Convert (w, h) to (max_x, max_y) by adding (min_x, min_y) to (w, h)
                 # anchors become (min_x, min_y, max_x, max_y) <--- Important!!!
-                anchors[2, :, :, cur_anchor] = np.maximum(1, anchors[2, :, :, cur_anchor])
-                anchors[3, :, :, cur_anchor] = np.maximum(1, anchors[3, :, :, cur_anchor])
-                anchors[2, :, :, cur_anchor] += anchors[0, :, :, cur_anchor]
-                anchors[3, :, :, cur_anchor] += anchors[1, :, :, cur_anchor]
+                anchors[2, :, :, anc_idx] = np.maximum(1, anchors[2, :, :, anc_idx])
+                anchors[3, :, :, anc_idx] = np.maximum(1, anchors[3, :, :, anc_idx])
+                anchors[2, :, :, anc_idx] += anchors[0, :, :, anc_idx]
+                anchors[3, :, :, anc_idx] += anchors[1, :, :, anc_idx]
 
                 # Limit the anchors within the feature maps.
-                anchors[0, :, :, cur_anchor] = np.maximum(0, anchors[0, :, :, cur_anchor])
-                anchors[1, :, :, cur_anchor] = np.maximum(0, anchors[1, :, :, cur_anchor])
-                anchors[2, :, :, cur_anchor] = np.minimum(fw - 1, anchors[2, :, :, cur_anchor])
-                anchors[3, :, :, cur_anchor] = np.minimum(fh - 1, anchors[3, :, :, cur_anchor])
-
-                cur_anchor += 1
+                anchors[0, :, :, anc_idx] = np.maximum(0, anchors[0, :, :, anc_idx])
+                anchors[1, :, :, anc_idx] = np.maximum(0, anchors[1, :, :, anc_idx])
+                anchors[2, :, :, anc_idx] = np.minimum(fw - 1, anchors[2, :, :, anc_idx])
+                anchors[3, :, :, anc_idx] = np.minimum(fh - 1, anchors[3, :, :, anc_idx])
 
         # A.transpose((0, 3, 1, 2)) : (4, 38 height, 50 widht, 9) -> (4, 9, 38 height, 50 width)
         # np.reshape(A.transpose((0, 3, 1, 2)), (4, -1)) : -> (4, 17100)
@@ -132,9 +140,9 @@ class FRCNN(object):
         max_x = anchors[:, 2]  # predicted max_x (bottom right x coordinate of the anchor)
         max_y = anchors[:, 3]  # predicted max_y (bottom right y coordinate of the anchor)
 
-        idxs = np.where((min_x - max_x >= 0) | (min_y - max_y >= 0))
-        anchors = np.delete(anchors, idxs, 0)
-        probs = np.delete(probs, idxs, 0)
+        outside_idxs = np.where((min_x - max_x >= 0) | (min_y - max_y >= 0))
+        anchors = np.delete(anchors, outside_idxs, 0)
+        probs = np.delete(probs, outside_idxs, 0)
 
         return anchors, probs
 

@@ -11,6 +11,7 @@ from keras.optimizers import Adam
 from frcnn.config import Config
 from frcnn.logging import get_logger
 from frcnn.rpn import RegionProposalNetwork
+import numpy as np
 
 logger = get_logger(__name__)
 
@@ -26,6 +27,7 @@ class RegionOfInterestPoolingLayer(Layer):
         """
         super(RegionOfInterestPoolingLayer, self).__init__(**kwargs)
         assert len(size) == 2
+        np.random.seed(0)
 
         self.pool_height = size[0]
         self.pool_width = size[1]

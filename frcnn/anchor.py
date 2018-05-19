@@ -102,7 +102,7 @@ def to_absolute_coord_np(anchors, regrs):
 
     Input Tensors
         - anchors: (x_center, y_center, width, height)
-        - regres: predicted regression outputs (x, y, w, h)
+        - regres: predicted regression outputs (tx, ty, tw, th)
 
     -------------------------------------------------------------------------
     Refer to "to_relative_coord" function
@@ -116,10 +116,10 @@ def to_absolute_coord_np(anchors, regrs):
     :return: absolute coordinates of the anchor (x, y, w, h)
     """
     # Anchor
-    ax = anchors[0, :, :]
-    ay = anchors[1, :, :]
-    aw = anchors[2, :, :]
-    ah = anchors[3, :, :]
+    a_cx = anchors[0, :, :]
+    a_cy = anchors[1, :, :]
+    a_w = anchors[2, :, :]
+    a_h = anchors[3, :, :]
 
     # Regression output with relative coordinates
     tx = regrs[0, :, :]
@@ -127,18 +127,17 @@ def to_absolute_coord_np(anchors, regrs):
     tw = regrs[2, :, :]
     th = regrs[3, :, :]
 
-    cx = tx * aw + ax  # center coordinate of width
-    cy = ty * ah + ay  # center coordinate of height
-
-    w = np.exp(tw.astype(np.float64)) * aw  # width
-    h = np.exp(th.astype(np.float64)) * ah  # height
-    min_x = cx - w / 2.  # top left x coordinate of the anchor
-    min_y = cy - h / 2.  # top left y coordinate of the anchor
+    g_cx = tx * a_w + a_cx  # center coordinate of width
+    g_cy = ty * a_h + a_cy  # center coordinate of height
+    g_w = np.exp(tw.astype(np.float64)) * a_w  # width
+    g_h = np.exp(th.astype(np.float64)) * a_h  # height
+    min_x = g_cx - g_w / 2.  # top left x coordinate of the anchor
+    min_y = g_cy - g_h / 2.  # top left y coordinate of the anchor
 
     min_x = np.round(min_x)
     min_y = np.round(min_y)
-    w = np.round(w)
-    h = np.round(h)
+    w = np.round(g_w)
+    h = np.round(g_h)
 
     return np.stack([min_x, min_y, w, h])
 
@@ -152,18 +151,18 @@ def to_relative_coord_np(gta_coords: np.ndarray, anchor_coords: np.ndarray):
     """
     g_w = gta_coords[:, 2] - gta_coords[:, 0]
     g_h = gta_coords[:, 3] - gta_coords[:, 1]
-    w = anchor_coords[:, 2] - anchor_coords[:, 0]
-    h = anchor_coords[:, 3] - anchor_coords[:, 1]
+    a_w = anchor_coords[:, 2] - anchor_coords[:, 0]
+    a_h = anchor_coords[:, 3] - anchor_coords[:, 1]
 
     g_cx = (gta_coords[:, 0] + gta_coords[:, 2]) / 2.
     g_cy = (gta_coords[:, 1] + gta_coords[:, 3]) / 2.
-    cx = anchor_coords[:, 0] + (w / 2)  # center coordinate of width of the anchor box
-    cy = anchor_coords[:, 2] + (h / 2)  # center coordinate of height of the anchor box
+    cx = anchor_coords[:, 0] + (a_w / 2)  # center coordinate of width of the anchor box
+    cy = anchor_coords[:, 2] + (a_h / 2)  # center coordinate of height of the anchor box
 
-    tx = (g_cx - cx) / w
-    ty = (g_cy - cy) / h
-    tw = np.log(g_w / w)
-    th = np.log(g_h / h)
+    tx = (g_cx - cx) / a_w
+    ty = (g_cy - cy) / a_h
+    tw = np.log(g_w / a_w)
+    th = np.log(g_h / a_h)
 
     return np.stack([tx, ty, tw, th], axis=-1)
 

@@ -1,4 +1,3 @@
-import itertools
 import os
 from typing import List, Tuple
 
@@ -7,41 +6,58 @@ import numpy as np
 
 from frcnn.anchor import to_absolute_coord
 from frcnn.config import singleton_config
-from frcnn.iou import cal_iou
-from frcnn.tools import denormalize_image, cal_fen_output_size
+from frcnn.tools import denormalize_image
+
+
+def calculate_anchor_size():
+    config = singleton_config()
+    scales = list()
+    for ratio_idx in range(len(config.anchor_ratios)):
+        for scale_idx in range(len(config.anchor_scales)):
+            z_pos = scale_idx + len(config.anchor_ratios) * ratio_idx
+            anc_scale = config.anchor_scales[scale_idx]
+            anc_ratio = np.array(config.anchor_ratios[ratio_idx])
+
+            scales.append(anc_scale * anc_ratio)
+    return np.array(scales)
+
+
+def visualize_gta(image, meta):
+    width_ratio = meta['rescaled_width'] / meta['width']
+    height_ratio = meta['rescaled_height'] / meta['height']
+
+    # Ground Truth
+    for name, x1, y1, x2, y2 in meta['objects']:
+        x1 *= width_ratio
+        y1 *= height_ratio
+        x2 *= width_ratio
+        y2 *= height_ratio
+
+        x1 = int(x1)
+        y1 = int(y1)
+        x2 = int(x2)
+        y2 = int(y2)
+        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), thickness=2)
 
 
 class RPNTrainerDebug:
-    @staticmethod
-    def debug_next_batch(image, meta, cls, reg):
+
+    @classmethod
+    def debug_next_batch(cls, image, meta, clsf, regr):
         config = singleton_config()
-        scales = [scale * np.array(config.anchor_ratios) for scale in config.anchor_scales]
-        scales = np.array(scales).reshape(9, 2)
+
+        # Calculate Scales
+        scales = calculate_anchor_size()
+
+        # Visualize GTA
+        visualize_gta(image, meta)
 
         height, width, _ = image.shape
         image = denormalize_image(image)
 
-        width_ratio = meta['rescaled_width'] / meta['width']
-        height_ratio = meta['rescaled_height'] / meta['height']
-
-        # fen_w, fen_h, _ = cal_fen_output_size('vgg19', width, height)
-
-        # Ground Truth
-        for name, x1, y1, x2, y2 in meta['objects']:
-            x1 *= width_ratio
-            y1 *= height_ratio
-            x2 *= width_ratio
-            y2 *= height_ratio
-
-            x1 = int(x1)
-            y1 = int(y1)
-            x2 = int(x2)
-            y2 = int(y2)
-            cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), thickness=2)
-
         # Check Classification
-        cls_h, cls_w, cls_o = np.where(np.logical_and(cls[0, :, :, :9] == 1, cls[0, :, :, 9:] == 1))
-        reg = reg[0].copy()
+        cls_h, cls_w, cls_o = np.where(np.logical_and(clsf[0, :, :, :9] == 1, clsf[0, :, :, 9:] == 1))
+        regr = regr[0].copy()
 
         for i in range(len(cls_h)):
             loc_w = cls_w[i]
@@ -67,32 +83,14 @@ class RPNTrainerDebug:
             max_x = int(max_x)
             max_y = int(max_y)
 
-            # anc_width, anc_height = anc_scale * anc_rat[0], anc_scale * anc_rat[1]
-            #
-            # x_min = round(stride[0] * (x_pos + 0.5) - anc_width / 2)
-            # x_max = round(stride[0] * (x_pos + 0.5) + anc_width / 2)
-            # y_min = round(stride[1] * (y_pos + 0.5) - anc_height / 2)
-            # y_max = round(stride[1] * (y_pos + 0.5) + anc_height / 2)
-
-            # cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (0, 255, 255))
-            # cv2.rectangle(image, (min_x, min_y), (min_x+5, min_y+5), (0, 255, 255))
-            # cv2.rectangle(image, (max_x, max_y), (max_x + 5, max_y + 5), (255, 255, 0))
-
-            tx, ty, tw, th = reg[loc_h, loc_w, (loc_o * 4) + 36:(loc_o * 4) + 4 + 36]
-            print(reg[loc_h, loc_w])
+            tx, ty, tw, th = regr[loc_h, loc_w, (loc_o * 4) + 36:(loc_o * 4) + 4 + 36]
             g_cx, g_cy, g_w, g_h = to_absolute_coord([min_x, min_y, max_x, max_y], [tx, ty, tw, th])
             g_x1 = int(g_cx - g_w / 2)
             g_y1 = int(g_cy - g_h / 2)
             g_x2 = int(g_x1 + g_w)
             g_y2 = int(g_y1 + g_h)
 
-            # print(min_x, min_y, max_x, max_y, 'sxxxxxxxx', g_x1, g_y1, g_x2, g_y2)
             cv2.rectangle(image, (g_x1, g_y1), (g_x2, g_y2), (255, 255, 0), thickness=3)
-            # cv2.rectangle(image, (g_x1, g_y1), (g_x1 + 5, g_y1 + 5), (255, 255, 0))
-            # cv2.rectangle(image, (g_x2, g_y2), (g_x2 + 5, g_y2 + 5), (0, 255, 255))
-            cv2.imwrite('temp/' + meta['filename'], image)
-            import ipdb
-            ipdb.set_trace()
 
         cv2.imwrite('temp/' + meta['filename'], image)
 
@@ -133,7 +131,8 @@ class TestRPN:
 
 class FRCNNDebug:
     @staticmethod
-    def debug_generate_anchors(anchors: np.ndarray, probs, rescaled_image: np.ndarray, meta: dict):
+    def debug_generate_anchors(image: np.ndarray, meta: dict, anchors: np.ndarray, probs,
+                               cls_y: np.ndarray, reg_y: np.ndarray):
         """
         Anchors는 청생 포인트로 이미지에 점을 찍고, Ground-truth anchor는 빨간색 박스로 표시를 한다.
             - 빨간색 박스: meta에서 이미지에 대한 박스위치가 잘 잡혔는지 확인
@@ -145,11 +144,12 @@ class FRCNNDebug:
         """
         config = singleton_config()
 
-        # image = cv2.imread(meta['image_path'])
-        # image = cv2.resize(image, (meta['rescaled_width'], meta['rescaled_height']))
-        rescaled_image = rescaled_image.copy()
-        rescaled_image = denormalize_image(rescaled_image).copy()
+        image = image.copy()
+        image = denormalize_image(image).copy()
         ratio = meta['rescaled_ratio']
+
+        # Visualize GTA
+        visualize_gta(image, meta)
 
         for anchor, prob in zip(anchors, probs):
             min_x = anchor[0] * config.anchor_stride[0]
@@ -158,20 +158,14 @@ class FRCNNDebug:
             max_y = anchor[3] * config.anchor_stride[1] + min_y
             cx = (min_x + max_x) // 2
             cy = (min_y + max_y) // 2
-            cv2.rectangle(rescaled_image, (cx, cy), (cx + 5, cy + 5), (255 * prob, 255 * prob, 0))
 
-        for obj in meta['objects']:
-            min_x, min_y, max_x, max_y = obj[1:]
-            min_x = int(min_x * ratio)
-            min_y = int(min_y * ratio)
-            max_x = int(max_x * ratio)
-            max_y = int(max_y * ratio)
+            if prob == 0:
+                continue
 
-            cx = (min_x + max_x) // 2
-            cy = (min_y + max_y) // 2
-            cv2.rectangle(rescaled_image, (min_x, min_y), (max_x, max_y), (0, 0, 255), thickness=1)
+            cv2.rectangle(image, (cx, cy), (cx + 5, cy + 5), (255, 0, 255))
+            # cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (255 * prob, 255 * prob, 0))
 
-        cv2.imwrite(os.path.join('temp', meta['filename']), rescaled_image)
+        cv2.imwrite(os.path.join('temp', meta['filename']), image)
 
 
 class ClassifierDebug:

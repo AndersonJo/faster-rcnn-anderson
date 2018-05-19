@@ -239,8 +239,6 @@ class RPNTargetProcessor(object):
 
         # Debug
         if debug:
-            print(np.unique(_anchors_debug, axis=0).shape)
-            print('count:', count)
             cv2.imwrite('temp/' + meta['filename'], _image)
 
         # Final target data

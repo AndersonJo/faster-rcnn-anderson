@@ -1,25 +1,7 @@
 import os
-from datetime import datetime
-
-from frcnn.debug import check_clf_trainer_classification, FRCNNDebug, RPNTrainerDebug
-from frcnn.logging import get_logger
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-
 from argparse import ArgumentParser
 
-import cv2
-import keras.backend as K
-import numpy as np
-import tensorflow as tf
-from keras.utils import Progbar
-
-from frcnn.classifier_trainer import ClassifierTrainer
-from frcnn.config import singleton_config, Config
-from frcnn.frcnn import FRCNN
-from frcnn.nms import non_max_suppression
-from frcnn.rpn_trainer import RPNTrainer, RPNDataProcessor
-from frcnn.voc import PascalVocData
+from frcnn.logging import get_logger
 
 # Logger
 logger = get_logger(__name__)
@@ -28,6 +10,7 @@ logger = get_logger(__name__)
 parser = ArgumentParser(description='Faster R-CNN')
 parser.add_argument('--mode', default='train', type=str, help='train or test')
 parser.add_argument('--data', default='/data/VOCdevkit', type=str, help='the path of VOC or COCO dataset')
+parser.add_argument('--gpu', default='0', type=str, help='Specify which gpu to use as a number')
 
 # Parser:: Base Model (Feature Extraction Network)
 parser.add_argument('--net', default='vgg19', type=str, help='base network (vgg, resnet)')
@@ -35,6 +18,22 @@ parser.add_argument('--net', default='vgg19', type=str, help='base network (vgg,
 # Parser:: Reginon Proposal Network & Anchor
 parser.add_argument('--rescale', default=True, type=bool, help='Rescale input image to lager one')
 parser = parser.parse_args()
+
+os.environ["CUDA_VISIBLE_DEVICES"] = parser.gpu
+
+import cv2
+import keras.backend as K
+import numpy as np
+import tensorflow as tf
+from keras.utils import Progbar
+
+from frcnn.debug import RPNTrainerDebug, FRCNNDebug
+from frcnn.classifier_trainer import ClassifierTrainer
+from frcnn.config import singleton_config, Config
+from frcnn.frcnn import FRCNN
+from frcnn.nms import non_max_suppression
+from frcnn.rpn_trainer import RPNTrainer, RPNDataProcessor
+from frcnn.voc import PascalVocData
 
 # Momory Limit & Debugging
 tf_config = tf.ConfigProto()
@@ -44,9 +43,6 @@ tf_config.gpu_options.allow_growth = True
 sess = tf.Session(config=tf_config)
 # sess = tf_debug.LocalCLIDebugWrapperSession(sess)
 K.set_session(sess)
-
-
-# set_session(tf.Session(config=tf_config))
 
 
 def train_voc(config: Config, train: list, class_mapping: dict):
@@ -69,22 +65,19 @@ def train_voc(config: Config, train: list, class_mapping: dict):
 
     for epoch in range(100):
         for step in range(len(train)):
+            # Get VOC data and RPN targets
             batch_image, original_image, batch_cls, batch_regr, meta = rpn_trainer.next_batch(debug=False)
-            # DEBUG RPN Trainer
-            RPNTrainerDebug.debug_next_batch(batch_image[0].copy(), meta, batch_cls, batch_regr)
+            # RPNTrainerDebug.debug_next_batch(batch_image[0].copy(), meta, batch_cls, batch_regr)  # DEBUG
 
             # Train Region Proposal Network
             rpn_loss = frcnn.rpn_model.train_on_batch(batch_image, [batch_cls, batch_regr])
 
             # Train Classifier Network
             rpn_cls, rpn_reg = frcnn.rpn_model.predict_on_batch(batch_image)
-            anchors, probs = frcnn.generate_anchors(rpn_cls, rpn_reg)
-
-            # Non Maximum Suppression
+            anchors, probs = frcnn.generate_anchors(rpn_cls, rpn_reg, batch_cls, batch_regr, debug=True)
             anchors, probs = non_max_suppression(anchors, probs, overlap_threshold=0.9, max_box=300)
+            FRCNNDebug.debug_generate_anchors(batch_image[0].copy(), meta, anchors, probs, batch_cls, batch_regr)
 
-            # DEBUG Anchors
-            # FRCNNDebug.debug_generate_anchors(anchors, probs, batch_image[0].copy(), meta, )
             rois, cls_y, reg_y, best_ious = clf_trainer.next_batch(anchors, meta, image=batch_image[0].copy(),
                                                                    debug_image=False, )
 
@@ -173,6 +166,10 @@ def main(config: Config):
     logger.info('loading data')
     vocdata = PascalVocData(config.data_path)
     train, test, class_mapping = vocdata.load_data(limit_size=30, add_bg=True)
+
+    # Set Random Seed
+    # np.random.seed(0)
+    # tf.set_random_seed(0)
 
     if parser.mode == 'train':
         train_voc(config, train, class_mapping)
