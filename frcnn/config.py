@@ -41,7 +41,7 @@ class Config:
     rpn_depth = 512
 
     # overlaps for RPN
-    rpn_min_overlap = 0.3
+    rpn_min_overlap = 0.1
     rpn_max_overlap = 0.7
 
     ###################################

@@ -73,11 +73,14 @@ def train_voc(config: Config, train: list, class_mapping: dict):
             rpn_loss = frcnn.rpn_model.train_on_batch(batch_image, [batch_cls, batch_regr])
 
             # Train Classifier Network
-            rpn_cls, rpn_reg = frcnn.rpn_model.predict_on_batch(batch_image)
-            anchors, probs = frcnn.generate_anchors(rpn_cls, rpn_reg, batch_cls, batch_regr, debug=False)
+            if True or global_step % 2 == 0:
+                rpn_cls, rpn_reg = frcnn.rpn_model.predict_on_batch(batch_image)
+            else:
+                rpn_cls = batch_cls[:, :, :, frcnn.rpn.n_anchor:]
+                rpn_reg = batch_regr[:, :, :, frcnn.rpn.n_anchor * 4:]
+            anchors, probs = frcnn.generate_anchors(rpn_cls, rpn_reg)
             anchors, probs = non_max_suppression(anchors, probs, overlap_threshold=0.9, max_box=300)
-            # FRCNNDebug.debug_generate_anchors(batch_image[0].copy(), meta, anchors, probs, batch_cls, batch_regr)
-
+            FRCNNDebug.debug_generate_anchors(batch_image[0].copy(), meta, anchors, probs, batch_cls, batch_regr)
             rois, cls_y, reg_y, best_ious = clf_trainer.next_batch(anchors, meta, image=batch_image[0].copy(),
                                                                    debug_image=False, )
 
@@ -92,6 +95,8 @@ def train_voc(config: Config, train: list, class_mapping: dict):
             if (total_loss < best_loss and global_step > 1000) or (global_step % 1000 == 0 and global_step > 1000):
                 if total_loss < best_loss:
                     best_loss = total_loss
+
+                global_step = int(global_step)
                 filename = 'checkpoints/model_{0}_{1:.4}.hdf5'.format(global_step, round(total_loss, 4))
                 frcnn.save(filename)
 

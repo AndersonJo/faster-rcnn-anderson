@@ -1,5 +1,4 @@
 import keras.backend as K
-import tensorflow as tf
 from keras import Model
 from keras.layers import Conv2D
 from keras.optimizers import Adam
@@ -90,8 +89,7 @@ class RegionProposalNetwork(object):
 
         return log_loss
 
-    def regression_loss(self, n_anchor: int, huber_delta: float = 1., lambda_reg: float = 1., normalize_w: float = 0.5,
-                        epsilon: float = 1e-9):
+    def regression_loss(self, n_anchor: int, huber_delta: float = 1., lambda_reg: float = 1., epsilon: float = 1e-9):
         """
         :param n_anchor: the number of anchors
         :param huber_delta: ....
@@ -104,24 +102,21 @@ class RegionProposalNetwork(object):
 
         def smooth_l1(y_true, y_pred):
             reg_y = y_true[:, :, :, 4 * n_anchor:]
+            cls_y = y_true[:, :, :, :4 * n_anchor]
 
             # cond = tf.equal(reg_y, tf.constant(0.))
             # cls_y = tf.where(cond, tf.zeros_like(reg_y), tf.ones_like(reg_y))
             # cls_y = K.print_tensor(cls_y, 'cls_y')
             # cls_y = tf.Print(cls_y, [cls_y], 'cls_y', first_n=100)
 
-            cls_y = y_true[:, :, :, :4 * n_anchor]
-
             h1 = K.abs(reg_y - y_pred)
             h2 = K.switch(h1 < huber_delta, 0.5 * h1 ** 2, h1 - 0.5 * huber_delta)
-            loss = K.sum(h2) / (normalize_w * K.sum(cls_y) + epsilon)
+            loss = K.sum(h2) / (K.sum(cls_y) + epsilon)
 
             self.tensors['reg_y_true'] = y_true
             self.tensors['reg_y_pred'] = y_pred
             self.tensors['reg_reg_y'] = reg_y
-            # self.tensors['reg_cond'] = cond
             self.tensors['reg_cls_y'] = cls_y
-            # self.tensors['reg_cls_y2'] = cls_y2
             self.tensors['reg_h1'] = h1
             self.tensors['reg_h2'] = h2
             self.tensors['reg_loss'] = loss

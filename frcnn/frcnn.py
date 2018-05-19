@@ -62,9 +62,7 @@ class FRCNN(object):
     def clf_model(self) -> Model:
         return self.clf.model
 
-    def generate_anchors(self, rpn_cls_output: np.ndarray, rpn_reg_output: np.ndarray,
-                         cls_y: np.ndarray = None, reg_y: np.ndarray = None,
-                         debug=False) -> Tuple[np.ndarray, np.ndarray]:
+    def generate_anchors(self, rpn_cls_output: np.ndarray, rpn_reg_output: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         The method do the followings
             1. Create Anchors on the basis of feature maps
@@ -81,9 +79,6 @@ class FRCNN(object):
             - anchors: (min_x, min_y, max_x, max_y)
             - probs: classification probabilities (object or background)
         """
-        if debug:
-            rpn_cls_output = cls_y[:, :, :, 9:]
-            rpn_reg_output = reg_y[:, :, :, 36:]
 
         anchor_scales = self.clf.anchor_scales
         anchor_ratios = self.clf.anchor_ratios
@@ -91,7 +86,8 @@ class FRCNN(object):
         n_ratios = len(anchor_ratios)
         _, fh, fw, n_anchor = rpn_cls_output.shape  # shape example (1, 37, 50, 9)
 
-        anchors = np.zeros((4, fh, fw, n_anchor), dtype='int8')
+        fen_anchors = np.zeros((4, fh, fw, n_anchor), dtype='int8')
+
         for anchor_ratio_idx in range(n_ratios):
             for anchor_scale_idx in range(n_scales):
                 # anchor_width: Anchor's width on feature maps
@@ -108,42 +104,42 @@ class FRCNN(object):
                 regr = np.transpose(regr, (2, 0, 1))  # (4, 37, 50)
 
                 X, Y = np.meshgrid(np.arange(fw), np.arange(fh))
-                anchors[0, :, :, anc_idx] = X  # the center coordinate of anchor's width (37, 50)
-                anchors[1, :, :, anc_idx] = Y  # the center coordinate of anchor's height (37, 50)
-                anchors[2, :, :, anc_idx] = anchor_width  # anchor width <scalar value>
-                anchors[3, :, :, anc_idx] = anchor_height  # anchor height <scalar value>
-                anchors[:, :, :, anc_idx] = to_absolute_coord_np(anchors[:, :, :, anc_idx], regr)
+                fen_anchors[0, :, :, anc_idx] = X  # the center coordinate
+                fen_anchors[1, :, :, anc_idx] = Y  # the center coordinate of anchor's height (37, 50)
+                fen_anchors[2, :, :, anc_idx] = anchor_width  # anchor width <scalar value>
+                fen_anchors[3, :, :, anc_idx] = anchor_height  # anchor height <scalar value>
+                fen_anchors[:, :, :, anc_idx] = to_absolute_coord_np(fen_anchors[:, :, :, anc_idx], regr)
 
                 # it makes sure that anchors' width and height are at least 1
                 # Convert (w, h) to (max_x, max_y) by adding (min_x, min_y) to (w, h)
                 # anchors become (min_x, min_y, max_x, max_y) <--- Important!!!
-                anchors[2, :, :, anc_idx] = np.maximum(1, anchors[2, :, :, anc_idx])
-                anchors[3, :, :, anc_idx] = np.maximum(1, anchors[3, :, :, anc_idx])
-                anchors[2, :, :, anc_idx] += anchors[0, :, :, anc_idx]
-                anchors[3, :, :, anc_idx] += anchors[1, :, :, anc_idx]
+                fen_anchors[2, :, :, anc_idx] = np.maximum(0, fen_anchors[2, :, :, anc_idx])
+                fen_anchors[3, :, :, anc_idx] = np.maximum(0, fen_anchors[3, :, :, anc_idx])
+                fen_anchors[2, :, :, anc_idx] += fen_anchors[0, :, :, anc_idx]
+                fen_anchors[3, :, :, anc_idx] += fen_anchors[1, :, :, anc_idx]
 
                 # Limit the anchors within the feature maps.
-                anchors[0, :, :, anc_idx] = np.maximum(0, anchors[0, :, :, anc_idx])
-                anchors[1, :, :, anc_idx] = np.maximum(0, anchors[1, :, :, anc_idx])
-                anchors[2, :, :, anc_idx] = np.minimum(fw - 1, anchors[2, :, :, anc_idx])
-                anchors[3, :, :, anc_idx] = np.minimum(fh - 1, anchors[3, :, :, anc_idx])
+                fen_anchors[0, :, :, anc_idx] = np.maximum(0, fen_anchors[0, :, :, anc_idx])
+                fen_anchors[1, :, :, anc_idx] = np.maximum(0, fen_anchors[1, :, :, anc_idx])
+                fen_anchors[2, :, :, anc_idx] = np.minimum(fw, fen_anchors[2, :, :, anc_idx])
+                fen_anchors[3, :, :, anc_idx] = np.minimum(fh, fen_anchors[3, :, :, anc_idx])
 
         # A.transpose((0, 3, 1, 2)) : (4, 38 height, 50 widht, 9) -> (4, 9, 38 height, 50 width)
         # np.reshape(A.transpose((0, 3, 1, 2)), (4, -1)) : -> (4, 17100)
-        anchors = np.reshape(anchors.transpose((0, 3, 1, 2)), (4, -1)).transpose((1, 0))  # (17100, 4)
+        fen_anchors = np.reshape(fen_anchors.transpose((0, 3, 1, 2)), (4, -1)).transpose((1, 0))  # (17100, 4)
         probs = rpn_cls_output.transpose((0, 3, 1, 2)).reshape((-1))  # (17100,)
 
         # Filter weird anchors
-        min_x = anchors[:, 0]  # predicted min_x (top left x coordinate of the anchor)
-        min_y = anchors[:, 1]  # predicted min_y (top left y coordinate of the anchor)
-        max_x = anchors[:, 2]  # predicted max_x (bottom right x coordinate of the anchor)
-        max_y = anchors[:, 3]  # predicted max_y (bottom right y coordinate of the anchor)
+        min_x = fen_anchors[:, 0]  # predicted min_x (top left x coordinate of the anchor)
+        min_y = fen_anchors[:, 1]  # predicted min_y (top left y coordinate of the anchor)
+        max_x = fen_anchors[:, 2]  # predicted max_x (bottom right x coordinate of the anchor)
+        max_y = fen_anchors[:, 3]  # predicted max_y (bottom right y coordinate of the anchor)
 
-        outside_idxs = np.where((min_x - max_x >= 0) | (min_y - max_y >= 0))
-        anchors = np.delete(anchors, outside_idxs, 0)
+        outside_idxs = np.where((min_x - max_x > 0) | (min_y - max_y > 0))
+        fen_anchors = np.delete(fen_anchors, outside_idxs, 0)
         probs = np.delete(probs, outside_idxs, 0)
 
-        return anchors, probs
+        return fen_anchors, probs
 
     def clf_predict(self, batch_image: np.ndarray, anchors: np.ndarray, clf_threshold: float = 0.7, img_meta=None):
         """
@@ -224,35 +220,6 @@ class FRCNN(object):
 
             yield sliced_rois
 
-    def debug_nms_images(self, anchors: np.ndarray, img_meta: dict):
-        image = cv2.imread(img_meta['image_path'])
-        image = cv2.resize(image, (img_meta['rescaled_width'], img_meta['rescaled_height']))
-
-        ratio_x = img_meta['rescaled_width'] / img_meta['width']
-        ratio_y = img_meta['rescaled_height'] / img_meta['height']
-
-        for anchor in anchors:
-            min_x = anchor[0] * 16
-            min_y = anchor[1] * 16
-            max_x = anchor[2] * 16 + min_x
-            max_y = anchor[3] * 16 + min_y
-            cx = (min_x + max_x) // 2
-            cy = (min_y + max_y) // 2
-            cv2.rectangle(image, (cx, cy), (cx + 5, cy + 5), (0, 0, 255))
-
-        for obj in img_meta['objects']:
-            min_x, min_y, max_x, max_y = obj[1:]
-            min_x = int(min_x * ratio_x)
-            max_x = int(max_x * ratio_x)
-            min_y = int(min_y * ratio_y)
-            max_y = int(max_y * ratio_y)
-
-            cx = (min_x + max_x) // 2
-            cy = (min_y + max_y) // 2
-            cv2.rectangle(image, (cx, cy), (cx + 5, cy + 5), (255, 255, 0))
-
-        cv2.imwrite(os.path.join('temp', img_meta['filename']), image)
-
     def save(self, filepath=None):
         if filepath is None:
             filepath = self._model_path
@@ -266,7 +233,7 @@ class FRCNN(object):
             if match is None:
                 continue
 
-            step = float(match.group('step'))
+            step = int(match.group('step'))
             checkpoints.append((step, filename))
 
         lat_step = 0

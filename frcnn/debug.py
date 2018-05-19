@@ -22,7 +22,7 @@ def calculate_anchor_size():
     return np.array(scales)
 
 
-def visualize_gta(image, meta):
+def visualize_gta(image, meta, center=False):
     width_ratio = meta['rescaled_width'] / meta['width']
     height_ratio = meta['rescaled_height'] / meta['height']
 
@@ -37,7 +37,12 @@ def visualize_gta(image, meta):
         y1 = int(y1)
         x2 = int(x2)
         y2 = int(y2)
+
+        cx = int((x1 + x2) / 2)
+        cy = int((y1 + y2) / 2)
         cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), thickness=2)
+        if center:
+            cv2.rectangle(image, (cx - 3, cy - 3), (cx + 3, cy + 3), (0, 0, 255), thickness=2)
 
 
 class RPNTrainerDebug:
@@ -149,21 +154,29 @@ class FRCNNDebug:
         ratio = meta['rescaled_ratio']
 
         # Visualize GTA
-        visualize_gta(image, meta)
+        visualize_gta(image, meta, center=True)
 
         for anchor, prob in zip(anchors, probs):
-            min_x = anchor[0] * config.anchor_stride[0]
-            min_y = anchor[1] * config.anchor_stride[1]
-            max_x = anchor[2] * config.anchor_stride[0]
-            max_y = anchor[3] * config.anchor_stride[1]
-            cx = (min_x + max_x) // 2
-            cy = (min_y + max_y) // 2
+            min_x = (anchor[0] + 0.5) * config.anchor_stride[0]
+            min_y = (anchor[1] + 0.5) * config.anchor_stride[1]
+            max_x = (anchor[2] + 0.5) * config.anchor_stride[0]
+            max_y = (anchor[3] + 0.5) * config.anchor_stride[1]
+            cx = (min_x + max_x) / 2
+            cy = (min_y + max_y) / 2
 
-            cv2.rectangle(image, (cx, cy), (cx + 5, cy + 5), (255, 0, 255))
-            if prob > 0.7:
-                cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (255 * prob, 255 * prob, 0), thickness=2)
+            min_x = int(min_x)
+            min_y = int(min_y)
+            max_x = int(max_x)
+            max_y = int(max_y)
+            cx = int(cx)
+            cy = int(cy)
+
+            if prob > 0.8:
+                cv2.rectangle(image, (cx - 3, cy - 3), (cx + 3, cy + 3), (255, 255, 0), thickness=2)
+                # cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (255 * prob, 255 * prob, 0), thickness=2)
             else:
-                cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (0, 0, 0), thickness=1)
+                cv2.rectangle(image, (cx, cy), (cx + 5, cy + 5), (0, 0, 0), thickness=1)
+                # cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (0, 0, 0), thickness=1)
 
         cv2.imwrite(os.path.join('temp', meta['filename']), image)
 
@@ -230,3 +243,24 @@ def check_clf_trainer_classification(cls_y, meta, inv_class_mapping):
         print('predict:', _pred_class)
         print('answer:', _answer_class)
         print()
+
+
+def debug_nms_images(anchors: np.ndarray, meta: dict):
+    image = cv2.imread(meta['image_path'])
+    image = cv2.resize(image, (meta['rescaled_width'], meta['rescaled_height']))
+
+    ratio_x = meta['rescaled_width'] / meta['width']
+    ratio_y = meta['rescaled_height'] / meta['height']
+
+    visualize_gta(image, meta)
+
+    for anchor in anchors:
+        min_x = anchor[0] * 16
+        min_y = anchor[1] * 16
+        max_x = anchor[2] * 16 + min_x
+        max_y = anchor[3] * 16 + min_y
+        cx = (min_x + max_x) // 2
+        cy = (min_y + max_y) // 2
+        cv2.rectangle(image, (cx, cy), (cx + 5, cy + 5), (0, 0, 255))
+
+    cv2.imwrite(os.path.join('temp', meta['filename']), image)
