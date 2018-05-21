@@ -61,7 +61,7 @@ def train_voc(config: Config, train: list, class_mapping: dict):
     global_step, _ = frcnn.load_latest_model()
 
     # Progress Bar
-    progbar = Progbar(len(train), width=20, stateful_metrics=['iou', 'gta'])
+    progbar = Progbar(len(train), width=20, stateful_metrics=['iou', 'gta', 'rpn_c', 'rpn_r'])
 
     for epoch in range(100):
         for step in range(len(train)):
@@ -80,7 +80,7 @@ def train_voc(config: Config, train: list, class_mapping: dict):
                 rpn_reg = batch_regr[:, :, :, frcnn.rpn.n_anchor * 4:]
             anchors, probs = frcnn.generate_anchors(rpn_cls, rpn_reg)
             anchors, probs = non_max_suppression(anchors, probs, overlap_threshold=0.9, max_box=300)
-            FRCNNDebug.debug_generate_anchors(batch_image[0].copy(), meta, anchors, probs, batch_cls, batch_regr)
+            # FRCNNDebug.debug_generate_anchors(batch_image[0].copy(), meta, anchors, probs, batch_cls, batch_regr)
             rois, cls_y, reg_y, best_ious = clf_trainer.next_batch(anchors, meta, image=batch_image[0].copy(),
                                                                    debug_image=False, )
 
@@ -89,6 +89,7 @@ def train_voc(config: Config, train: list, class_mapping: dict):
 
             clf_loss = frcnn.clf_model.train_on_batch([batch_image, rois], [cls_y, reg_y])
             # cls_pred, reg_pred = clf.model.predict_on_batch([batch_img, rois])
+
 
             # Save the Model
             total_loss = rpn_loss[0] + clf_loss[0]
@@ -149,12 +150,13 @@ def test_voc(config: Config, test: list, class_mapping: dict):
         anchors, probs = non_max_suppression(anchors, probs, overlap_threshold=0.9, max_box=300)
 
         # DEBUG
-        # FRCNNDebug.debug_generate_anchors(anchors, probs, batch_image[0].copy(), meta)
+        FRCNNDebug.debug_generate_anchors(batch_image[0].copy(), meta, anchors, probs)
 
         cls_indices, gta_regs = frcnn.clf_predict(batch_image, anchors, img_meta=meta)
         gta_regs, cls_indices = non_max_suppression(gta_regs, cls_indices, overlap_threshold=0.5)
         if gta_regs is not None:
-            visualize(original_image, meta, gta_regs)
+            pass
+            # visualize(original_image, meta, gta_regs)
 
 
 def visualize(image, meta, gta_regs: np.ndarray):

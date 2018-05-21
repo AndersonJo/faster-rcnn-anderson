@@ -1,9 +1,9 @@
+import keras
+from keras_resnet import models as resnet_models
 import numpy as np
 from keras import Input, Model
 from keras.applications import ResNet50
 
-from frcnn.config import singleton_config
-from frcnn.fen import FeatureExtractionNetwork
 from frcnn.tools import calculate_resnet50_output
 
 
@@ -123,7 +123,7 @@ def btest_fen_output():
     """
 
 
-def test_restnet_output_size():
+def btest_restnet_output_size():
     """
          600 x 600, -4: (1, 19, 19, 2048)
     """
@@ -158,3 +158,19 @@ def test_restnet_output_size():
     output = calculate_resnet50_output(865, 1409)
     print(output, '(1, 27, 44, 512)', output == (27, 44))
     assert output == (27, 44)
+
+
+def test_resnet():
+    inputs = keras.layers.Input(shape=(None, None, 3))
+
+    model = resnet_models.ResNet50(inputs, include_top=False, freeze_bn=True)
+
+    image = np.random.rand(600, 600, 3)
+    image = np.expand_dims(image, 0)
+
+    print(model.predict(image))
+    Model(inputs, outputs=model.outputs[-1])
+    # print('[{0}] {1} x {2} = '.format(i, height, width), model.predict(image).shape)
+    print()
+    import ipdb
+    ipdb.set_trace()

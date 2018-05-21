@@ -137,7 +137,7 @@ class TestRPN:
 class FRCNNDebug:
     @staticmethod
     def debug_generate_anchors(image: np.ndarray, meta: dict, anchors: np.ndarray, probs,
-                               cls_y: np.ndarray, reg_y: np.ndarray):
+                               cls_y: np.ndarray=None, reg_y: np.ndarray=None):
         """
         Anchors는 청생 포인트로 이미지에 점을 찍고, Ground-truth anchor는 빨간색 박스로 표시를 한다.
             - 빨간색 박스: meta에서 이미지에 대한 박스위치가 잘 잡혔는지 확인
