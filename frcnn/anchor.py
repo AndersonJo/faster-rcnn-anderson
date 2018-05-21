@@ -43,17 +43,18 @@ def to_absolute_coord(anchor, regr):
     :param regr: (tx, ty, tw, th)
     :return: (cx, cy, w, h)
     """
+
     w = anchor[2] - anchor[0]
     h = anchor[3] - anchor[1]
-    cx = (anchor[0] + anchor[2]) / 2
-    cy = (anchor[1] + anchor[3]) / 2
+    cx = anchor[0] + (w / 2)
+    cy = anchor[1] + (h / 2)
 
     tx, ty, tw, th = regr
 
     g_cx = tx * w + cx
     g_cy = ty * h + cy
-    g_w = math.exp(tw) * w
-    g_h = math.exp(th) * h
+    g_w = np.exp(tw) * w
+    g_h = np.exp(th) * h
 
     return g_cx, g_cy, g_w, g_h
 
@@ -154,16 +155,15 @@ def to_relative_coord_np(gta_coords: np.ndarray, anchor_coords: np.ndarray):
     a_w = anchor_coords[:, 2] - anchor_coords[:, 0]
     a_h = anchor_coords[:, 3] - anchor_coords[:, 1]
 
-    g_cx = (gta_coords[:, 0] + gta_coords[:, 2]) / 2.
-    g_cy = (gta_coords[:, 1] + gta_coords[:, 3]) / 2.
+    g_cx = gta_coords[:, 0] + (g_w / 2)
+    g_cy = gta_coords[:, 1] + (g_h / 2)
     cx = anchor_coords[:, 0] + (a_w / 2)  # center coordinate of width of the anchor box
-    cy = anchor_coords[:, 2] + (a_h / 2)  # center coordinate of height of the anchor box
+    cy = anchor_coords[:, 1] + (a_h / 2)  # center coordinate of height of the anchor box
 
     tx = (g_cx - cx) / a_w
     ty = (g_cy - cy) / a_h
     tw = np.log(g_w / a_w)
     th = np.log(g_h / a_h)
-
     return np.stack([tx, ty, tw, th], axis=-1)
 
 

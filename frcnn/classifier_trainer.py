@@ -6,7 +6,7 @@ from typing import Tuple, List, Union
 
 import numpy as np
 
-from frcnn.anchor import ground_truth_anchors, to_relative_coord_np
+from frcnn.anchor import ground_truth_anchors, to_relative_coord_np, apply_regression_to_roi
 from frcnn.config import Config
 from frcnn.debug import ClassifierDebug
 from frcnn.iou import cal_iou
@@ -147,15 +147,15 @@ class ClassifierTrainer(object):
         rois[:, 2] = anchors[:, 2] - anchors[:, 0]  # width
         rois[:, 3] = anchors[:, 3] - anchors[:, 1]  # height
 
+        loc_bg = np.where(ious < self.max_overlap)[0]
+        loc_obj = np.where(ious >= self.max_overlap)[0]
+        n_obj = len(loc_obj)
+
         ################################################################################
         # Classfication Targets
         #   Classification one-hot target vectors : what is this object? car? or bicycle? as one-hot vectors
         #   - class_targets: [[0, 1, 0, ..., 0], [1, 0, 0, ..., 0], ...]
         ################################################################################
-        loc_bg = np.where(ious < self.max_overlap)[0]
-        loc_obj = np.where(ious >= self.max_overlap)[0]
-
-        n_obj = len(loc_obj)
         cls_y = np.zeros((n_ious, self.n_class))
         cls_y[loc_bg, self.class_mapping['bg']] = 1
         class_obj_indices = None
@@ -203,5 +203,4 @@ class ClassifierTrainer(object):
         rois = np.expand_dims(rois, axis=0)
         cls_y = np.expand_dims(cls_y, axis=0)
         reg_y = np.expand_dims(reg_y, axis=0)
-
         return rois, cls_y, reg_y, loc_obj, loc_bg, best_ious

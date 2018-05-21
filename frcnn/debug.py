@@ -4,7 +4,7 @@ from typing import List, Tuple
 import cv2
 import numpy as np
 
-from frcnn.anchor import to_absolute_coord
+from frcnn.anchor import to_absolute_coord, apply_regression_to_roi
 from frcnn.config import singleton_config
 from frcnn.tools import denormalize_image
 
@@ -137,7 +137,7 @@ class TestRPN:
 class FRCNNDebug:
     @staticmethod
     def debug_generate_anchors(image: np.ndarray, meta: dict, anchors: np.ndarray, probs,
-                               cls_y: np.ndarray=None, reg_y: np.ndarray=None):
+                               cls_y: np.ndarray = None, reg_y: np.ndarray = None):
         """
         Anchors는 청생 포인트로 이미지에 점을 찍고, Ground-truth anchor는 빨간색 박스로 표시를 한다.
             - 빨간색 박스: meta에서 이미지에 대한 박스위치가 잘 잡혔는지 확인
@@ -172,8 +172,9 @@ class FRCNNDebug:
             cy = int(cy)
 
             if prob > 0.8:
+                print(min_x, min_y, max_x, max_y)
                 cv2.rectangle(image, (cx - 3, cy - 3), (cx + 3, cy + 3), (255, 255, 0), thickness=2)
-                # cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (255 * prob, 255 * prob, 0), thickness=2)
+                cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (255 * prob, 255 * prob, 0), thickness=2)
             else:
                 cv2.rectangle(image, (cx, cy), (cx + 5, cy + 5), (0, 0, 0), thickness=1)
                 # cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (0, 0, 0), thickness=1)
@@ -182,6 +183,69 @@ class FRCNNDebug:
 
 
 class ClassifierDebug:
+
+    @classmethod
+    def debug_next_batch(cls, image, meta, rois, cls_p, reg_p, class_mapping):
+        """
+
+        :param image:
+        :param meta:
+        :param rois: (x, y, w, h) on feature map
+        :param cls_p:
+        :param reg_p: (tx, ty, th, tw)
+        :param class_mapping:
+        :return:
+        """
+        image = denormalize_image(image)
+        visualize_gta(image, meta)
+
+        # Test Classification
+        bg_idx = class_mapping['bg']
+        cls_pred = list(filter(lambda x: x != bg_idx, np.argmax(cls_p, axis=2)[0]))
+        cls_true = [class_mapping[obj[0]] for obj in meta['objects']]
+        print('cls_pred:', cls_pred)
+        print('cls_true:', cls_true)
+
+        # Test Regression
+        mask = np.where(reg_p[:, :, :80] == 1)
+        mask_regs = reg_p[:, :, 80:][mask].reshape(-1, 4)
+        mask_rois = rois[0, :mask_regs.shape[0]]
+
+        # Center of Anchor
+        cxs = mask_rois[:, 0] + mask_rois[:, 2] / 2  # x_a + w_a/2 = cx_a
+        cys = mask_rois[:, 1] + mask_rois[:, 3] / 2  # y_a + h_a/2 = cy_a
+
+        for cx, cy in zip(cxs, cys):
+            cx = int((cx + 0.5) * 16)
+            cy = int((cy + 0.5) * 16)
+            cv2.rectangle(image, (cx - 3, cy - 3), (cx + 3, cy + 3), (255, 255, 0), thickness=2)
+
+        # Rectangle
+        batch_xywh = apply_regression_to_roi(mask_regs, mask_rois).astype('float64')
+        batch_xywh[:, 0] -= batch_xywh[:, 2] / 2.
+        batch_xywh[:, 1] -= batch_xywh[:, 3] / 2.
+        batch_xywh[:, 2] += batch_xywh[:, 0]
+        batch_xywh[:, 3] += batch_xywh[:, 1]
+
+        for roi in batch_xywh:
+            min_x = roi[0]
+            min_y = roi[1]
+            max_x = roi[2]
+            max_y = roi[3]
+
+            min_x = int((min_x + 0.5) * 16)
+            min_y = int((min_y + 0.5) * 16)
+            max_x = int((max_x + 0.5) * 16)
+            max_y = int((max_y + 0.5) * 16)
+
+            if min_x < 0 or min_y < 0 or max_x < 0 or max_y < 0:
+                continue
+
+            if (max_x - min_x) < 0 or (max_y - min_y) < 0:
+                continue
+
+            cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (255, 255, 0), thickness=2)
+        cv2.imwrite('temp/{0}'.format(meta['filename']), image)
 
     @classmethod
     def debug_images(cls, rois, loc_obj, loc_bg, img_meta, image):

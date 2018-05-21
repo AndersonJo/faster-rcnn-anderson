@@ -2,8 +2,9 @@ import os
 from argparse import ArgumentParser
 
 from frcnn.logging import get_logger
-
 # Logger
+from frcnn.tools import denormalize_image
+
 logger = get_logger(__name__)
 
 # Parser:: Basic Arguments
@@ -27,7 +28,7 @@ import numpy as np
 import tensorflow as tf
 from keras.utils import Progbar
 
-from frcnn.debug import RPNTrainerDebug, FRCNNDebug
+from frcnn.debug import FRCNNDebug, visualize_gta, ClassifierDebug
 from frcnn.classifier_trainer import ClassifierTrainer
 from frcnn.config import singleton_config, Config
 from frcnn.frcnn import FRCNN
@@ -73,7 +74,7 @@ def train_voc(config: Config, train: list, class_mapping: dict):
             rpn_loss = frcnn.rpn_model.train_on_batch(batch_image, [batch_cls, batch_regr])
 
             # Train Classifier Network
-            if True or global_step % 2 == 0:
+            if False and global_step % 2 == 0:
                 rpn_cls, rpn_reg = frcnn.rpn_model.predict_on_batch(batch_image)
             else:
                 rpn_cls = batch_cls[:, :, :, frcnn.rpn.n_anchor:]
@@ -81,15 +82,23 @@ def train_voc(config: Config, train: list, class_mapping: dict):
             anchors, probs = frcnn.generate_anchors(rpn_cls, rpn_reg)
             anchors, probs = non_max_suppression(anchors, probs, overlap_threshold=0.9, max_box=300)
             # FRCNNDebug.debug_generate_anchors(batch_image[0].copy(), meta, anchors, probs, batch_cls, batch_regr)
-            rois, cls_y, reg_y, best_ious = clf_trainer.next_batch(anchors, meta, image=batch_image[0].copy(),
-                                                                   debug_image=False, )
 
+            rois, cls_y, reg_y, best_ious = clf_trainer.next_batch(anchors, meta,
+                                                                   image=batch_image[0].copy(),
+                                                                   debug_image=False)
             if rois is None:
                 continue
 
-            clf_loss = frcnn.clf_model.train_on_batch([batch_image, rois], [cls_y, reg_y])
-            # cls_pred, reg_pred = clf.model.predict_on_batch([batch_img, rois])
+            # DEBUG
+            if cls_y is not None:
+                pass
+                # ClassifierDebug.debug_next_batch(batch_image[0].copy(), meta, rois, cls_y, reg_y, class_mapping)
 
+            clf_loss = frcnn.clf_model.train_on_batch([batch_image, rois], [cls_y, reg_y])
+
+            # Test
+            # cls_pred, reg_pred = frcnn.clf_predict(batch_image, anchors, img_meta=meta)
+            # reg_pred, cls_pred = non_max_suppression(reg_pred, cls_pred, overlap_threshold=0.5)
 
             # Save the Model
             total_loss = rpn_loss[0] + clf_loss[0]
@@ -159,11 +168,9 @@ def test_voc(config: Config, test: list, class_mapping: dict):
             # visualize(original_image, meta, gta_regs)
 
 
-def visualize(image, meta, gta_regs: np.ndarray):
-    for reg in gta_regs:
-        rescaled_ratio = meta['rescaled_ratio']
-        min_x, min_y, max_x, max_y = (reg // rescaled_ratio).astype(np.uint8).tolist()
-        cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (0, 0, 255))
+def visualize(image, meta, cls_p, reg_p):
+    image = denormalize_image(image)
+    visualize_gta(image, meta)
 
     cv2.imwrite('temp/{0}'.format(meta['filename']), image)
 
