@@ -33,13 +33,11 @@ class Config:
     # BaseNetwork
     ###################################
     net_name = 'vgg19'
+    fen_depth = 512
 
     ###################################
     # Region Proposal Network & Anchor
     ###################################
-    # Depth
-    rpn_depth = 512
-
     # overlaps for RPN
     rpn_min_overlap = 0.1
     rpn_max_overlap = 0.7

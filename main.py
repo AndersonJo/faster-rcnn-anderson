@@ -74,31 +74,30 @@ def train_voc(config: Config, train: list, class_mapping: dict):
             rpn_loss = frcnn.rpn_model.train_on_batch(batch_image, [batch_cls, batch_regr])
 
             # Train Classifier Network
-            if False and global_step % 2 == 0:
+            if True or global_step % 2 == 0:
                 rpn_cls, rpn_reg = frcnn.rpn_model.predict_on_batch(batch_image)
             else:
                 rpn_cls = batch_cls[:, :, :, frcnn.rpn.n_anchor:]
                 rpn_reg = batch_regr[:, :, :, frcnn.rpn.n_anchor * 4:]
+
+            # anchors: (min_x, min_y, max_y, max_y)
             anchors, probs = frcnn.generate_anchors(rpn_cls, rpn_reg)
             anchors, probs = non_max_suppression(anchors, probs, overlap_threshold=0.9, max_box=300)
             # FRCNNDebug.debug_generate_anchors(batch_image[0].copy(), meta, anchors, probs, batch_cls, batch_regr)
 
+            # rois: (min_x, min_y, w, h)
             rois, cls_y, reg_y, best_ious = clf_trainer.next_batch(anchors, meta,
                                                                    image=batch_image[0].copy(),
                                                                    debug_image=False)
+
             if rois is None:
                 continue
 
             # DEBUG
-            if cls_y is not None:
-                pass
-                # ClassifierDebug.debug_next_batch(batch_image[0].copy(), meta, rois, cls_y, reg_y, class_mapping)
+            # if cls_y is not None:
+            #     ClassifierDebug.debug_next_batch(batch_image[0].copy(), meta, rois, cls_y, reg_y, class_mapping)
 
             clf_loss = frcnn.clf_model.train_on_batch([batch_image, rois], [cls_y, reg_y])
-
-            # Test
-            # cls_pred, reg_pred = frcnn.clf_predict(batch_image, anchors, img_meta=meta)
-            # reg_pred, cls_pred = non_max_suppression(reg_pred, cls_pred, overlap_threshold=0.5)
 
             # Save the Model
             total_loss = rpn_loss[0] + clf_loss[0]
@@ -146,7 +145,7 @@ def test_voc(config: Config, test: list, class_mapping: dict):
     rpn_data = RPNDataProcessor(test, shuffle=False, augment=False)
 
     # Create Model
-    frcnn = FRCNN(config, class_mapping)
+    frcnn = FRCNN(config, class_mapping, train=False)
     frcnn.load_latest_model()
 
     # Inference
@@ -155,22 +154,41 @@ def test_voc(config: Config, test: list, class_mapping: dict):
 
         rpn_cls, rpn_reg, f_maps = frcnn.rpn_model.predict_on_batch(batch_image)
         anchors, probs = frcnn.generate_anchors(rpn_cls, rpn_reg)
-        # Non Maximum Suppression
         anchors, probs = non_max_suppression(anchors, probs, overlap_threshold=0.9, max_box=300)
 
         # DEBUG
-        FRCNNDebug.debug_generate_anchors(batch_image[0].copy(), meta, anchors, probs)
+        # FRCNNDebug.debug_generate_anchors(batch_image[0].copy(), meta, anchors, probs)
 
-        cls_indices, gta_regs = frcnn.clf_predict(batch_image, anchors, img_meta=meta)
+        cls_indices, gta_regs = frcnn.clf_predict(f_maps, anchors, meta=meta)
         gta_regs, cls_indices = non_max_suppression(gta_regs, cls_indices, overlap_threshold=0.5)
-        if gta_regs is not None:
-            pass
-            # visualize(original_image, meta, gta_regs)
+        # if gta_regs is not None:
+    # visualize(original_image, meta, gta_regs)
 
 
-def visualize(image, meta, cls_p, reg_p):
+def visualize(image, meta, cls_p, reg_p, class_mapping):
     image = denormalize_image(image)
     visualize_gta(image, meta)
+
+    # Test Classification
+    bg_idx = class_mapping['bg']
+    cls_pred = list(filter(lambda x: x != bg_idx, np.argmax(cls_p, axis=2)[0]))
+    cls_true = [class_mapping[obj[0]] for obj in meta['objects']]
+    print('cls_pred:', cls_pred)
+    print('cls_true:', cls_true)
+
+    # Test Regression
+    mask = np.where(reg_p[:, :, :80] == 1)
+    mask_regs = reg_p[:, :, 80:][mask].reshape(-1, 4)
+    mask_rois = rois[0, :mask_regs.shape[0]]
+
+    # Center of Anchor
+    cxs = mask_rois[:, 0] + mask_rois[:, 2] / 2  # x_a + w_a/2 = cx_a
+    cys = mask_rois[:, 1] + mask_rois[:, 3] / 2  # y_a + h_a/2 = cy_a
+
+    for cx, cy in zip(cxs, cys):
+        cx = int((cx + 0.5) * 16)
+        cy = int((cy + 0.5) * 16)
+        cv2.rectangle(image, (cx - 3, cy - 3), (cx + 3, cy + 3), (255, 255, 0), thickness=2)
 
     cv2.imwrite('temp/{0}'.format(meta['filename']), image)
 

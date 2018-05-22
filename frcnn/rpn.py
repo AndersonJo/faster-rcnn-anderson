@@ -13,7 +13,7 @@ class RegionProposalNetwork(object):
         """
         # Region Proposal Network
         :param n_anchor: the number of anchors (usually 9)
-        :param rpn_depth: the depth of the intermediate layer in Region Proposal Network (usually 256 or 512)
+        :param fen_depth: the depth of the intermediate layer in Region Proposal Network (usually 256 or 512)
         """
         self.fen = fen
 
@@ -28,7 +28,7 @@ class RegionProposalNetwork(object):
         self.rpn_reg = None
         self.rpn_model = None
         self.tensors = dict()
-        self._init_rpn(config.rpn_depth, train)
+        self._init_rpn(config.fen_depth, train)
 
     def _init_rpn(self, rpn_depth: int, train: bool = False):
         """

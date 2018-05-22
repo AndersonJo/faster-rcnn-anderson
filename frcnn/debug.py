@@ -4,7 +4,7 @@ from typing import List, Tuple
 import cv2
 import numpy as np
 
-from frcnn.anchor import to_absolute_coord, apply_regression_to_roi
+from frcnn.anchor import to_absolute_coord, apply_regression_to_xywh
 from frcnn.config import singleton_config
 from frcnn.tools import denormalize_image
 
@@ -172,7 +172,6 @@ class FRCNNDebug:
             cy = int(cy)
 
             if prob > 0.8:
-                print(min_x, min_y, max_x, max_y)
                 cv2.rectangle(image, (cx - 3, cy - 3), (cx + 3, cy + 3), (255, 255, 0), thickness=2)
                 cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (255 * prob, 255 * prob, 0), thickness=2)
             else:
@@ -221,44 +220,45 @@ class ClassifierDebug:
             cv2.rectangle(image, (cx - 3, cy - 3), (cx + 3, cy + 3), (255, 255, 0), thickness=2)
 
         # Rectangle
-        batch_xywh = apply_regression_to_roi(mask_regs, mask_rois).astype('float64')
+        batch_xywh = apply_regression_to_xywh(mask_regs, mask_rois).astype('float64')
         batch_xywh[:, 0] -= batch_xywh[:, 2] / 2.
         batch_xywh[:, 1] -= batch_xywh[:, 3] / 2.
         batch_xywh[:, 2] += batch_xywh[:, 0]
         batch_xywh[:, 3] += batch_xywh[:, 1]
+        anchors = batch_xywh
 
-        for roi in batch_xywh:
-            min_x = roi[0]
-            min_y = roi[1]
-            max_x = roi[2]
-            max_y = roi[3]
+        for anchor in anchors:
+            min_x = anchor[0]
+            min_y = anchor[1]
+            max_x = anchor[2]
+            max_y = anchor[3]
 
             min_x = int((min_x + 0.5) * 16)
             min_y = int((min_y + 0.5) * 16)
             max_x = int((max_x + 0.5) * 16)
             max_y = int((max_y + 0.5) * 16)
 
-            if min_x < 0 or min_y < 0 or max_x < 0 or max_y < 0:
-                continue
-
-            if (max_x - min_x) < 0 or (max_y - min_y) < 0:
-                continue
+            # if min_x < 0 or min_y < 0 or max_x < 0 or max_y < 0:
+            #     continue
+            #
+            # if (max_x - min_x) < 0 or (max_y - min_y) < 0:
+            #     continue
 
             cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (255, 255, 0), thickness=2)
         cv2.imwrite('temp/{0}'.format(meta['filename']), image)
 
     @classmethod
-    def debug_images(cls, rois, loc_obj, loc_bg, img_meta, image):
+    def debug_images(cls, xywh, loc_obj, loc_bg, img_meta, image):
 
         image = denormalize_image(image.copy()).copy()
 
         ratio_x = img_meta['rescaled_width'] / img_meta['width']
         ratio_y = img_meta['rescaled_height'] / img_meta['height']
 
-        for roi in rois[0, loc_obj]:
+        for roi in xywh[0, loc_obj]:
             cls._rectangle(image, roi, color=(255, 255, 0), thickness=2)
 
-        for roi in rois[0, loc_bg]:
+        for roi in xywh[0, loc_bg]:
             cls._point(image, roi, color=(200, 200, 200), thickness=2)
 
         for obj in img_meta['objects']:

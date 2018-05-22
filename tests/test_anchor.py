@@ -1,11 +1,6 @@
-import itertools
-
-from frcnn.anchor import to_relative_coord_np, apply_regression_to_roi, to_absolute_coord, to_absolute_coord_np
-from frcnn.config import singleton_config
-from frcnn.rpn_trainer import RPNTrainer
-from frcnn.voc import PascalVocData
-from tests import DATASET_ROOT_PATH
 import numpy as np
+
+from frcnn.anchor import to_relative_coord_np, to_absolute_coord, apply_regression_to_xywh
 
 
 def test_relative_and_absolute_anchor():
@@ -22,10 +17,11 @@ def test_relative_and_absolute_anchor():
                      [3, 3, 10, 15],
                      [2, 8, 5, 120],
                      [1, 1, 2, 2]], dtype=np.float64)
-    relatives = to_relative_coord_np(gtas, ancs)
+    txtytwth = to_relative_coord_np(gtas, ancs)
 
+    # Test to_absolute_coord
     gtas_pred = list()
-    for anc, regr in zip(ancs, relatives):
+    for anc, regr in zip(ancs, txtytwth):
         xywh = to_absolute_coord(anc, regr)
         xywh = list(xywh)
         xywh[0] -= xywh[2] / 2.
@@ -36,3 +32,15 @@ def test_relative_and_absolute_anchor():
 
     gtas_pred = np.array(gtas_pred)
     assert (gtas_pred == gtas).all()
+
+    # Test apply_regression_to_roi
+    mxmywh = ancs.copy()
+    mxmywh[:, 2] = mxmywh[:, 2] - mxmywh[:, 0]  # to width
+    mxmywh[:, 3] = mxmywh[:, 3] - mxmywh[:, 1]  # to height
+    cxcywh = apply_regression_to_xywh(txtytwth, mxmywh).astype(np.float64)
+    anchors = cxcywh
+    anchors[:, 0] -= anchors[:, 2] / 2.
+    anchors[:, 1] -= anchors[:, 3] / 2.
+    anchors[:, 2] += anchors[:, 0]
+    anchors[:, 3] += anchors[:, 1]
+    assert (anchors == gtas).all()

@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 from keras import Model
 
-from frcnn.anchor import to_absolute_coord_np, apply_regression_to_roi
+from frcnn.anchor import to_absolute_coord_np, apply_regression_to_xywh
 from frcnn.classifier import ClassifierNetwork
 from frcnn.config import Config
 from frcnn.fen import FeatureExtractionNetwork
@@ -20,9 +20,11 @@ class FRCNN(object):
     CHECKPOINT_REGEX = 'model_(?P<step>\d+)_(?P<loss>\d*\.\d*)\.hdf5'
 
     def __init__(self, config: Config, class_mapping: dict, input_shape=(None, None, 3), train: bool = False):
+        self.train = train
+
         fen = FeatureExtractionNetwork(config, input_shape=input_shape)
         rpn = RegionProposalNetwork(fen, config, train=train)
-        clf = ClassifierNetwork(rpn, config, class_mapping)
+        clf = ClassifierNetwork(rpn, config, class_mapping, train=train, n_feature=config.fen_depth)
 
         self.fen = fen
         self.rpn = rpn
@@ -32,7 +34,9 @@ class FRCNN(object):
 
         # Initialize ModelAll
         self._model_path = config.model_path
-        self._model_all = self._init_all_model()
+
+        if train:
+            self._model_all = self._init_all_model()
 
     def _init_all_model(self) -> Model:
         """
@@ -141,9 +145,9 @@ class FRCNN(object):
 
         return fen_anchors, probs
 
-    def clf_predict(self, batch_image: np.ndarray, anchors: np.ndarray, clf_threshold: float = 0.7, img_meta=None):
+    def clf_predict(self, inputs: np.ndarray, anchors: np.ndarray, clf_threshold: float = 0.7, meta=None):
         """
-        :param batch_image: (1, h, w, 3) image
+        :param inputs: when training, it is batch image. when inference, it is feature maps
         :param anchors: (None, (min_x, min_y, max_x, max_y))
         :param clf_threshold: exclude predicted output which have lower probabilities than clf_threshold
         :return:
@@ -151,8 +155,8 @@ class FRCNN(object):
         cls_pred = list()
         reg_pred = list()
         rois = list()
-        for roi in self._iter_rois(anchors):
-            cls_p, reg_p = self.clf_model.predict_on_batch([batch_image, roi])
+        for roi in self._iter_rois(anchors):  # (min_x, min_y, max_x, max_y) -> (min_x, min_y, w, h)
+            cls_p, reg_p = self.clf_model.predict_on_batch([inputs, roi])
             cls_pred.append(cls_p)
             reg_pred.append(reg_p)
             rois.append(roi)
@@ -180,7 +184,7 @@ class FRCNN(object):
         regs[:, 2] /= self._clf_reg_std[2]
         regs[:, 3] /= self._clf_reg_std[3]
 
-        gta_regs = apply_regression_to_roi(regs, rois)  # gta_regs <- (g_x, g_y, g_w, g_h)
+        gta_regs = apply_regression_to_xywh(regs, rois)  # gta_regs <- (g_x, g_y, g_w, g_h)
         # Convert (g_x, g_y, g_w, g_h) -> (min_x, min_y, max_x, max_y)
         gta_regs[:, 2] = gta_regs[:, 0] + gta_regs[:, 2]  # max_x
         gta_regs[:, 3] = gta_regs[:, 1] + gta_regs[:, 3]  # max_y
@@ -277,5 +281,11 @@ class FRCNN(object):
     def load(self, filepath=None):
         if filepath is None:
             filepath = self._model_path
-        self._model_all.load_weights(filepath)
+
+        if self.train:
+            self._model_all.load_weights(filepath)
+        else:
+            self.rpn_model.load_weights(filepath, by_name=True)
+            self.clf_model.load_weights(filepath, by_name=True)
+
         logger.info('load: ' + filepath)

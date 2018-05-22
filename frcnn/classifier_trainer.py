@@ -6,7 +6,7 @@ from typing import Tuple, List, Union
 
 import numpy as np
 
-from frcnn.anchor import ground_truth_anchors, to_relative_coord_np, apply_regression_to_roi
+from frcnn.anchor import ground_truth_anchors, to_relative_coord_np, apply_regression_to_xywh
 from frcnn.config import Config
 from frcnn.debug import ClassifierDebug
 from frcnn.iou import cal_iou
@@ -39,6 +39,7 @@ class ClassifierTrainer(object):
         :param overlap_threshold : overlap threshold used for Non Max Suppression
         :return:
             - (None, None, None) or (rois, cls_y, reg_y)
+            - rois: (min_x, min_y, w, h) on feature maps
         """
         # Create ground-truth anchors
         gt_anchors, classes = ground_truth_anchors(meta, subsampling_stride=self.anchor_stride)

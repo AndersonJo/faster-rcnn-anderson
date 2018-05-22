@@ -83,7 +83,8 @@ class RegionOfInterestPoolingLayer(Layer):
 
 class ClassifierNetwork(object):
 
-    def __init__(self, rpn: RegionProposalNetwork, config: Config, class_mapping: dict, roi_method: str = 'resize'):
+    def __init__(self, rpn: RegionProposalNetwork, config: Config, class_mapping: dict, roi_method: str = 'resize',
+                 train: bool = True, n_feature: int = 512):
         """
         # Region of Interest
         :param rpn: Region Proposal Network instance
@@ -108,18 +109,25 @@ class ClassifierNetwork(object):
         self.roi_pool_size = config.roi_pool_size
         self.roi_method = roi_method
         self.roi_input = Input(shape=(self.n_roi, 4))
+        self.fen_input = Input(shape=(None, None, n_feature))
 
         self.roi_cls_output = None
         self.roi_reg_output = None
         self.tensors = dict()
-        self.roi_model = self._init_classifier()
 
-    def _init_classifier(self) -> Model:
+        if train:
+            self.roi_model = self._init_classifier(train=True)
+        else:
+            self.roi_model = self._init_classifier(train=False)
+
+    def _init_classifier(self, train: bool = False) -> Model:
         roi_pooling_layer = RegionOfInterestPoolingLayer(size=self.roi_pool_size,
                                                          n_roi=self.n_roi,
                                                          method=self.roi_method)
-
-        roi_pooled_output = roi_pooling_layer([self.rpn.fen.output, self.roi_input])
+        if train:
+            roi_pooled_output = roi_pooling_layer([self.rpn.fen.output, self.roi_input])
+        else:
+            roi_pooled_output = roi_pooling_layer([self.fen_input, self.roi_input])
 
         h = TimeDistributed(Flatten(name='flatten'))(roi_pooled_output)
         h = TimeDistributed(Dense(4096, activation='relu', name='roi_fc1'))(h)
@@ -143,10 +151,13 @@ class ClassifierNetwork(object):
         self.tensors['clf_cls'] = cls_output
         self.tensors['clf_reg'] = reg_output
 
-        image_input = self.rpn.fen.image_input
-        roi_model = Model([image_input, self.roi_input], [cls_output, reg_output])
-        roi_model.compile(optimizer=Adam(lr=1e-5),
-                          loss=[self.clf_loss, self.regr_loss(len(self.class_mapping))])
+        if train:
+            image_input = self.rpn.fen.image_input
+            roi_model = Model([image_input, self.roi_input], [cls_output, reg_output])
+            roi_model.compile(optimizer=Adam(lr=1e-5),
+                              loss=[self.clf_loss, self.regr_loss(len(self.class_mapping))])
+        else:
+            roi_model = Model([self.fen_input, self.roi_input], [cls_output, reg_output])
 
         return roi_model
 
