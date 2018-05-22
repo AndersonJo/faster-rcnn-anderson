@@ -1,8 +1,8 @@
 import os
-from argparse import ArgumentParser
 
+print('hahahaha')
+from argparse import ArgumentParser
 from frcnn.logging import get_logger
-# Logger
 from frcnn.tools import denormalize_image
 
 logger = get_logger(__name__)
@@ -47,7 +47,7 @@ K.set_session(sess)
 
 
 def train_voc(config: Config, train: list, class_mapping: dict):
-    inv_class_mapping = {v: k for k, v in class_mapping.items()}
+    class_mapping_inv = {v: k for k, v in class_mapping.items()}
 
     # Parameters
     best_loss = np.inf
@@ -74,7 +74,7 @@ def train_voc(config: Config, train: list, class_mapping: dict):
             rpn_loss = frcnn.rpn_model.train_on_batch(batch_image, [batch_cls, batch_regr])
 
             # Train Classifier Network
-            if True or global_step % 2 == 0:
+            if global_step % 3 == 0:
                 rpn_cls, rpn_reg = frcnn.rpn_model.predict_on_batch(batch_image)
             else:
                 rpn_cls = batch_cls[:, :, :, frcnn.rpn.n_anchor:]
@@ -96,12 +96,13 @@ def train_voc(config: Config, train: list, class_mapping: dict):
             # DEBUG
             # if cls_y is not None:
             #     ClassifierDebug.debug_next_batch(batch_image[0].copy(), meta, rois, cls_y, reg_y, class_mapping)
-            # ipdb > cls_y.shape
-            # (1, 16, 21)
-            # ipdb > reg_y.shape
-            # (1, 16, 160)
 
             clf_loss = frcnn.clf_model.train_on_batch([batch_image, rois], [cls_y, reg_y])
+
+            # DEBUG
+            # cls_pred, anc_pred = frcnn.to_anchors(cls_y, reg_y[:, :, 80:], rois, clf_threshold=0.7)
+            # anc_pred, cls_pred = non_max_suppression(anc_pred, cls_pred, overlap_threshold=0.8)
+            # visualize(batch_image[0].copy(), meta, cls_pred, anc_pred, class_mapping, class_mapping_inv)
 
             # Save the Model
             total_loss = rpn_loss[0] + clf_loss[0]
@@ -166,13 +167,12 @@ def test_voc(config: Config, test: list, class_mapping: dict):
         cls_pred, anc_pred = frcnn.clf_predict(f_maps, anchors, meta=meta)
         anc_pred, cls_pred = non_max_suppression(anc_pred, cls_pred, overlap_threshold=0.8)
         if anc_pred is not None:
-            visualize(batch_image[0].copy(), meta, cls_pred, anc_pred, class_mapping)
+            visualize(batch_image[0].copy(), meta, cls_pred, anc_pred, class_mapping, class_mapping_inv)
 
         # if gta_regs is not None:
 
 
-def visualize(image, meta, cls_p, anc_p, class_mapping):
-    n_class = len(class_mapping) - 1
+def visualize(image, meta, cls_p, anc_p, class_mapping, class_mapping_inv):
     image = denormalize_image(image)
     visualize_gta(image, meta)
 
@@ -180,9 +180,12 @@ def visualize(image, meta, cls_p, anc_p, class_mapping):
     bg_idx = class_mapping['bg']
 
     cls_pred = cls_p[np.where(cls_p != bg_idx)]
-    cls_true = [class_mapping[obj[0]] for obj in meta['objects']]
+    cls_pred = [class_mapping_inv[cls_idx] for cls_idx in cls_pred]
+    cls_true = [obj[0] for obj in meta['objects']]
+
     print('cls_pred:', cls_pred)
     print('cls_true:', cls_true)
+    print()
 
     # Test Regression
     for anc in anc_p:

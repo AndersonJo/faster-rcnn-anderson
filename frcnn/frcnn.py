@@ -161,13 +161,19 @@ class FRCNN(object):
             reg_pred.append(reg_p)
             rois.append(roi)
 
-        cls_pred = np.concatenate(cls_pred, axis=1)
-        reg_pred = np.concatenate(reg_pred, axis=1)
-        rois = np.concatenate(rois, axis=1)
+        cls_pred = np.concatenate(cls_pred, axis=1)  # ex. (1, 1296, 21)
+        reg_pred = np.concatenate(reg_pred, axis=1)  # ex. (1, 1296, 80)
+        rois = np.concatenate(rois, axis=1)  # ex. (1, 1296, 4)
+
+        return self.to_anchors(cls_pred, reg_pred, rois, clf_threshold)
+
+    def to_anchors(self, cls_pred: np.ndarray, reg_pred: np.ndarray, rois: np.ndarray, clf_threshold: float = 0.7,
+                   meta: np.ndarray = None):
 
         # Exclude background classfication output and the ones which have low probabilities.
         _bg = self.clf.class_mapping['bg']
-        mask = (np.max(cls_pred, axis=2) > clf_threshold) & (np.argmax(cls_pred, axis=2) != _bg)
+
+        mask = (np.max(cls_pred, axis=-1) > clf_threshold) & (np.argmax(cls_pred, axis=-1) != _bg)
 
         cls_pred = cls_pred[mask]  # (None, n_class) with background
         reg_pred = reg_pred[mask]  # (None, (n_class-1) * 4)
@@ -213,8 +219,8 @@ class FRCNN(object):
         rois[:, 3] = anchors[:, 3] - anchors[:, 1]  # height
         rois = np.expand_dims(rois, axis=0)
 
-        for i in range(N):
-            sliced_rois = rois[:, i:i + n_roi]
+        for i in range(N // n_roi + 1):
+            sliced_rois = rois[:, i * n_roi:(i + 1) * n_roi]
             _n = sliced_rois.shape[1]
 
             if _n != n_roi:
@@ -222,7 +228,12 @@ class FRCNN(object):
 
                 new_rois = np.zeros((1, n_roi, 4))
                 new_rois[:, :_n] = sliced_rois
-                new_rois[:, _n:] = rois[:, :n_residual]
+                try:
+                    new_rois[:, _n:] = rois[:, :n_residual]
+                except Exception as e:
+                    print(e)
+                    import ipdb
+                    ipdb.set_trace()
                 sliced_rois = new_rois
 
             yield sliced_rois
