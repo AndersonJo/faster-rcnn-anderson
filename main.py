@@ -96,6 +96,10 @@ def train_voc(config: Config, train: list, class_mapping: dict):
             # DEBUG
             # if cls_y is not None:
             #     ClassifierDebug.debug_next_batch(batch_image[0].copy(), meta, rois, cls_y, reg_y, class_mapping)
+            # ipdb > cls_y.shape
+            # (1, 16, 21)
+            # ipdb > reg_y.shape
+            # (1, 16, 160)
 
             clf_loss = frcnn.clf_model.train_on_batch([batch_image, rois], [cls_y, reg_y])
 
@@ -159,36 +163,30 @@ def test_voc(config: Config, test: list, class_mapping: dict):
         # DEBUG
         # FRCNNDebug.debug_generate_anchors(batch_image[0].copy(), meta, anchors, probs)
 
-        cls_indices, gta_regs = frcnn.clf_predict(f_maps, anchors, meta=meta)
-        gta_regs, cls_indices = non_max_suppression(gta_regs, cls_indices, overlap_threshold=0.5)
+        cls_pred, anc_pred = frcnn.clf_predict(f_maps, anchors, meta=meta)
+        anc_pred, cls_pred = non_max_suppression(anc_pred, cls_pred, overlap_threshold=0.8)
+        if anc_pred is not None:
+            visualize(batch_image[0].copy(), meta, cls_pred, anc_pred, class_mapping)
+
         # if gta_regs is not None:
-    # visualize(original_image, meta, gta_regs)
 
 
-def visualize(image, meta, cls_p, reg_p, class_mapping):
+def visualize(image, meta, cls_p, anc_p, class_mapping):
+    n_class = len(class_mapping) - 1
     image = denormalize_image(image)
     visualize_gta(image, meta)
 
     # Test Classification
     bg_idx = class_mapping['bg']
-    cls_pred = list(filter(lambda x: x != bg_idx, np.argmax(cls_p, axis=2)[0]))
+
+    cls_pred = cls_p[np.where(cls_p != bg_idx)]
     cls_true = [class_mapping[obj[0]] for obj in meta['objects']]
     print('cls_pred:', cls_pred)
     print('cls_true:', cls_true)
 
     # Test Regression
-    mask = np.where(reg_p[:, :, :80] == 1)
-    mask_regs = reg_p[:, :, 80:][mask].reshape(-1, 4)
-    mask_rois = rois[0, :mask_regs.shape[0]]
-
-    # Center of Anchor
-    cxs = mask_rois[:, 0] + mask_rois[:, 2] / 2  # x_a + w_a/2 = cx_a
-    cys = mask_rois[:, 1] + mask_rois[:, 3] / 2  # y_a + h_a/2 = cy_a
-
-    for cx, cy in zip(cxs, cys):
-        cx = int((cx + 0.5) * 16)
-        cy = int((cy + 0.5) * 16)
-        cv2.rectangle(image, (cx - 3, cy - 3), (cx + 3, cy + 3), (255, 255, 0), thickness=2)
+    for anc in anc_p:
+        cv2.rectangle(image, (anc[0], anc[1]), (anc[2], anc[3]), (255, 255, 0))
 
     cv2.imwrite('temp/{0}'.format(meta['filename']), image)
 
@@ -198,6 +196,8 @@ def main(config: Config):
     logger.info('loading data')
     vocdata = PascalVocData(config.data_path)
     train, test, class_mapping = vocdata.load_data(limit_size=30, add_bg=True)
+
+    print(class_mapping)
 
     # Set Random Seed
     # np.random.seed(0)

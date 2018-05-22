@@ -30,7 +30,7 @@ class FRCNN(object):
         self.rpn = rpn
         self.clf = clf
 
-        self._clf_reg_std = config.clf_regr_std
+        self.regr_std = config.clf_regr_std
 
         # Initialize ModelAll
         self._model_path = config.model_path
@@ -179,23 +179,26 @@ class FRCNN(object):
         for i, cls_idx in enumerate(cls_indices):
             regs[i] = reg_pred[i, cls_idx: cls_idx + 4]  # regs <- (tx, ty, th, tw)
 
-        regs[:, 0] /= self._clf_reg_std[0]
-        regs[:, 1] /= self._clf_reg_std[1]
-        regs[:, 2] /= self._clf_reg_std[2]
-        regs[:, 3] /= self._clf_reg_std[3]
+        regs[:, 0] /= self.regr_std[0]
+        regs[:, 1] /= self.regr_std[1]
+        regs[:, 2] /= self.regr_std[2]
+        regs[:, 3] /= self.regr_std[3]
 
-        gta_regs = apply_regression_to_xywh(regs, rois)  # gta_regs <- (g_x, g_y, g_w, g_h)
-        # Convert (g_x, g_y, g_w, g_h) -> (min_x, min_y, max_x, max_y)
-        gta_regs[:, 2] = gta_regs[:, 0] + gta_regs[:, 2]  # max_x
-        gta_regs[:, 3] = gta_regs[:, 1] + gta_regs[:, 3]  # max_y
+        cxcycwch = apply_regression_to_xywh(regs, rois)  # gta_regs <- (g_x, g_y, g_w, g_h)
+        # Convert (g_min_x, g_min_y, g_w, g_h) -> (min_x, min_y, max_x, max_y)
+        cxcycwch[:, 0] -= cxcycwch[:, 2] / 2.
+        cxcycwch[:, 1] -= cxcycwch[:, 3] / 2.
+        cxcycwch[:, 2] += cxcycwch[:, 0]
+        cxcycwch[:, 3] += cxcycwch[:, 1]
+        anchors = cxcycwch
 
         # Inverse Anchor Stride
-        gta_regs[:, 0] *= self.clf.anchor_stride[0]
-        gta_regs[:, 1] *= self.clf.anchor_stride[1]
-        gta_regs[:, 2] *= self.clf.anchor_stride[0]
-        gta_regs[:, 3] *= self.clf.anchor_stride[1]
+        anchors[:, 0] *= self.clf.anchor_stride[0]
+        anchors[:, 1] *= self.clf.anchor_stride[1]
+        anchors[:, 2] *= self.clf.anchor_stride[0]
+        anchors[:, 3] *= self.clf.anchor_stride[1]
 
-        return cls_indices, gta_regs
+        return cls_indices, anchors
 
     def _iter_rois(self, anchors):
         """
