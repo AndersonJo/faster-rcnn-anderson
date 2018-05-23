@@ -1,6 +1,6 @@
 import numpy as np
 
-from frcnn.anchor import to_relative_coord_np, to_absolute_coord, apply_regression_to_xywh
+from frcnn.anchor import to_relative_coord_np, to_absolute_coord, apply_regression_to_rois
 
 
 def test_relative_and_absolute_anchor():
@@ -37,7 +37,7 @@ def test_relative_and_absolute_anchor():
     mxmywh = ancs.copy()
     mxmywh[:, 2] = mxmywh[:, 2] - mxmywh[:, 0]  # to width
     mxmywh[:, 3] = mxmywh[:, 3] - mxmywh[:, 1]  # to height
-    cxcywh = apply_regression_to_xywh(txtytwth, mxmywh).astype(np.float64)
+    cxcywh = apply_regression_to_rois(txtytwth, mxmywh).astype(np.float64)
     anchors = cxcywh
     anchors[:, 0] -= anchors[:, 2] / 2.
     anchors[:, 1] -= anchors[:, 3] / 2.

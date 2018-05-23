@@ -5,8 +5,10 @@ import math
 from typing import Tuple, List, Union
 
 import numpy as np
+from dateutil import relativedelta
 
-from frcnn.anchor import ground_truth_anchors, to_relative_coord_np, apply_regression_to_xywh
+from frcnn.anchor import ground_truth_anchors, to_relative_coord_np, apply_regression_to_rois, to_absolute_coord_np, \
+    to_absolute_coord
 from frcnn.config import Config
 from frcnn.debug import ClassifierDebug
 from frcnn.iou import cal_iou
@@ -185,14 +187,29 @@ class ClassifierTrainer(object):
             obj_anchors = anchors[loc_obj]
             relative_t = to_relative_coord_np(gt_obj_anchors, obj_anchors)
 
+            # DEBUG START ########################################################################
+            # backs = []
+            # for reg, anc in zip(relative_t, obj_anchors):
+            #     back = to_absolute_coord(anc, reg)
+            #     back = np.array(back)
+            #
+            #     back[0] -= back[2] / 2.
+            #     back[1] -= back[3] / 2.
+            #     back[2] += back[0]
+            #     back[3] += back[1]
+            #     backs.append(back)
+            # backs = np.array(backs)
+            # assert (np.round(backs, 3) == np.round(gt_obj_anchors, 3)).all()
+            # DEBUG END ########################################################################
+
+            relative_t[:, 0] *= self.regr_std[0]
+            relative_t[:, 1] *= self.regr_std[1]
+            relative_t[:, 2] *= self.regr_std[2]
+            relative_t[:, 3] *= self.regr_std[3]
+
             _loc_v = np.array([np.arange(idx * 4, idx * 4 + 4) for idx in class_obj_indices])
             coords[loc_obj, _loc_v.T] = relative_t.T
             labels[loc_obj, _loc_v.T] = 1
-
-        coords[:, 0] *= self.regr_std[0]
-        coords[:, 1] *= self.regr_std[1]
-        coords[:, 2] *= self.regr_std[2]
-        coords[:, 3] *= self.regr_std[3]
 
         # Exclude the background class. In this case, bg is the last one
         coords = coords[:, :-4]

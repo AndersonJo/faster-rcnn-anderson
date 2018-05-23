@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 from keras import Model
 
-from frcnn.anchor import to_absolute_coord_np, apply_regression_to_xywh
+from frcnn.anchor import to_absolute_coord_np, apply_regression_to_rois
 from frcnn.classifier import ClassifierNetwork
 from frcnn.config import Config
 from frcnn.fen import FeatureExtractionNetwork
@@ -168,13 +168,11 @@ class FRCNN(object):
         return self.to_anchors(cls_pred, reg_pred, rois, clf_threshold)
 
     def to_anchors(self, cls_pred: np.ndarray, reg_pred: np.ndarray, rois: np.ndarray, clf_threshold: float = 0.7,
-                   meta: np.ndarray = None):
+                   meta: np.ndarray = None, gtas=None):
 
         # Exclude background classfication output and the ones which have low probabilities.
         _bg = self.clf.class_mapping['bg']
-
         mask = (np.max(cls_pred, axis=-1) > clf_threshold) & (np.argmax(cls_pred, axis=-1) != _bg)
-
         cls_pred = cls_pred[mask]  # (None, n_class) with background
         reg_pred = reg_pred[mask]  # (None, (n_class-1) * 4)
         rois = rois[mask]
@@ -183,14 +181,14 @@ class FRCNN(object):
         cls_indices = np.argmax(cls_pred, axis=1).reshape(-1)
         regs = np.zeros((len(cls_indices), 4), dtype=np.float32)
         for i, cls_idx in enumerate(cls_indices):
-            regs[i] = reg_pred[i, cls_idx: cls_idx + 4]  # regs <- (tx, ty, th, tw)
+            regs[i] = reg_pred[i, (cls_idx * 4): (cls_idx * 4) + 4]  # regs <- (tx, ty, th, tw)
 
         regs[:, 0] /= self.regr_std[0]
         regs[:, 1] /= self.regr_std[1]
         regs[:, 2] /= self.regr_std[2]
         regs[:, 3] /= self.regr_std[3]
 
-        cxcycwch = apply_regression_to_xywh(regs, rois)  # gta_regs <- (g_x, g_y, g_w, g_h)
+        cxcycwch = apply_regression_to_rois(regs, rois)  # gta_regs <- (g_x, g_y, g_w, g_h)
         # Convert (g_min_x, g_min_y, g_w, g_h) -> (min_x, min_y, max_x, max_y)
         cxcycwch[:, 0] -= cxcycwch[:, 2] / 2.
         cxcycwch[:, 1] -= cxcycwch[:, 3] / 2.
@@ -244,7 +242,7 @@ class FRCNN(object):
         self._model_all.save_weights(filepath)
         logger.info('saved ' + filepath)
 
-    def load_latest_model(self) -> Tuple[float, str]:
+    def load_latest_model(self) -> Tuple[float, float, str]:
         checkpoints = list()
         for filename in os.listdir('checkpoints'):
             match = re.match(self.CHECKPOINT_REGEX, filename)
@@ -252,21 +250,23 @@ class FRCNN(object):
                 continue
 
             step = int(match.group('step'))
-            checkpoints.append((step, filename))
+            loss = float(match.group('loss'))
+            checkpoints.append((step, loss, filename))
 
         lat_step = 0
-        lat_checkpoint = None
+        best_loss = np.inf
+        filename = None
 
         if len(checkpoints) >= 1:
             checkpoints = sorted(checkpoints, key=lambda c: c[0])
-            lat_step, lat_checkpoint = checkpoints[-1]
+            lat_step, best_loss, filename = checkpoints[-1]
 
-            self.load(os.path.join('checkpoints', lat_checkpoint))
-            logger.info('loaded latest checkpoint - ' + lat_checkpoint)
+            self.load(os.path.join('checkpoints', filename))
+            logger.info('loaded latest checkpoint - ' + filename)
         else:
             logger.info('no checkpoint')
 
-        return lat_step, lat_checkpoint
+        return lat_step, best_loss, filename
 
     def load_most_accurate_model(self) -> Tuple[float, str]:
         checkpoints = list()

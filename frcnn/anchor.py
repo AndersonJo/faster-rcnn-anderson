@@ -26,10 +26,10 @@ def ground_truth_anchors(image_data: dict, subsampling_stride: List[int] = None)
             w_ratio /= subsampling_stride[0]
             h_ratio /= subsampling_stride[1]
 
-        gta[i, 0] = int(round(x1 * w_ratio))
-        gta[i, 1] = int(round(y1 * h_ratio))
-        gta[i, 2] = int(round(x2 * w_ratio))
-        gta[i, 3] = int(round(y2 * h_ratio))
+        gta[i, 0] = x1 * w_ratio
+        gta[i, 1] = y1 * h_ratio
+        gta[i, 2] = x2 * w_ratio
+        gta[i, 3] = y2 * h_ratio
 
     return gta, classes
 
@@ -68,6 +68,7 @@ def to_relative_coord(gta_coord: np.ndarray, anchor_coord: np.ndarray) -> np.nda
 
     return np.array([tx, ty, tw, th])
 
+
 def to_absolute_coord(anchor, regr):
     """
     :param anchor: (min_x, min_y, max_x, max_y)
@@ -88,6 +89,7 @@ def to_absolute_coord(anchor, regr):
     g_h = np.exp(th) * h
 
     return g_cx, g_cy, g_w, g_h
+
 
 # def apply_single_reg_to_roi(reg: np.ndarray, roi: np.ndarray):
 #     """
@@ -156,12 +158,7 @@ def to_absolute_coord_np(anchors, regrs):
     min_x = g_cx - g_w / 2.  # top left x coordinate of the anchor
     min_y = g_cy - g_h / 2.  # top left y coordinate of the anchor
 
-    min_x = np.round(min_x)
-    min_y = np.round(min_y)
-    w = np.round(g_w)
-    h = np.round(g_h)
-
-    return np.stack([min_x, min_y, w, h])
+    return np.stack([min_x, min_y, g_w, g_h])
 
 
 def to_relative_coord_np(gta_coords: np.ndarray, anchor_coords: np.ndarray):
@@ -188,7 +185,7 @@ def to_relative_coord_np(gta_coords: np.ndarray, anchor_coords: np.ndarray):
     return np.stack([tx, ty, tw, th], axis=-1)
 
 
-def apply_regression_to_xywh(regs: np.ndarray, rois: np.ndarray):
+def apply_regression_to_rois(regs: np.ndarray, rois: np.ndarray):
     """
     Apply predicted regression output to rois
     :param regs: batch of (tx, ty, tw, th) .. predicted regressions

@@ -4,7 +4,7 @@ from typing import List, Tuple
 import cv2
 import numpy as np
 
-from frcnn.anchor import to_absolute_coord, apply_regression_to_xywh
+from frcnn.anchor import to_absolute_coord, apply_regression_to_rois
 from frcnn.config import singleton_config
 from frcnn.tools import denormalize_image
 
@@ -136,8 +136,7 @@ class TestRPN:
 
 class FRCNNDebug:
     @staticmethod
-    def debug_generate_anchors(image: np.ndarray, meta: dict, anchors: np.ndarray, probs,
-                               cls_y: np.ndarray = None, reg_y: np.ndarray = None):
+    def debug_generate_anchors(image: np.ndarray, meta: dict, anchors: np.ndarray, probs):
         """
         Anchors는 청생 포인트로 이미지에 점을 찍고, Ground-truth anchor는 빨간색 박스로 표시를 한다.
             - 빨간색 박스: meta에서 이미지에 대한 박스위치가 잘 잡혔는지 확인
@@ -184,7 +183,7 @@ class FRCNNDebug:
 class ClassifierDebug:
 
     @classmethod
-    def debug_next_batch(cls, image, meta, rois, cls_p, reg_p, class_mapping):
+    def debug_next_batch(cls, image, meta, rois, cls_p, reg_p, class_mapping, class_mapping_inv):
         """
 
         :param image:
@@ -201,9 +200,14 @@ class ClassifierDebug:
         # Test Classification
         bg_idx = class_mapping['bg']
         cls_pred = list(filter(lambda x: x != bg_idx, np.argmax(cls_p, axis=2)[0]))
-        cls_true = [class_mapping[obj[0]] for obj in meta['objects']]
+        cls_pred = [class_mapping_inv[cls_idx] for cls_idx in cls_pred]
+        cls_true = [obj[0] for obj in meta['objects']]
+
         print('cls_pred:', cls_pred)
         print('cls_true:', cls_true)
+        print()
+
+        assert np.isin(np.unique(cls_pred), cls_true).all()
 
         # Test Regression
         mask = np.where(reg_p[:, :, :80] == 1)
@@ -220,7 +224,7 @@ class ClassifierDebug:
             cv2.rectangle(image, (cx - 3, cy - 3), (cx + 3, cy + 3), (255, 255, 0), thickness=2)
 
         # Rectangle
-        batch_xywh = apply_regression_to_xywh(mask_regs, mask_rois).astype('float64')
+        batch_xywh = apply_regression_to_rois(mask_regs, mask_rois).astype('float64')
         batch_xywh[:, 0] -= batch_xywh[:, 2] / 2.
         batch_xywh[:, 1] -= batch_xywh[:, 3] / 2.
         batch_xywh[:, 2] += batch_xywh[:, 0]
@@ -233,10 +237,10 @@ class ClassifierDebug:
             max_x = anchor[2]
             max_y = anchor[3]
 
-            min_x = int((min_x + 0.5) * 16)
-            min_y = int((min_y + 0.5) * 16)
-            max_x = int((max_x + 0.5) * 16)
-            max_y = int((max_y + 0.5) * 16)
+            min_x = int(min_x * 16)
+            min_y = int(min_y * 16)
+            max_x = int(max_x * 16)
+            max_y = int(max_y * 16)
 
             # if min_x < 0 or min_y < 0 or max_x < 0 or max_y < 0:
             #     continue

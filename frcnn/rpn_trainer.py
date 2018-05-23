@@ -265,10 +265,10 @@ class RPNTargetProcessor(object):
         width_ratio = rescaled_width / float(width)
         height_ratio = rescaled_height / float(height)
 
-        x_min = round(box[0] * width_ratio)
-        y_min = round(box[1] * height_ratio)
-        x_max = round(box[2] * width_ratio)
-        y_max = round(box[3] * height_ratio)
+        x_min = box[0] * width_ratio
+        y_min = box[1] * height_ratio
+        x_max = box[2] * width_ratio
+        y_max = box[3] * height_ratio
         return np.array([x_min, y_min, x_max, y_max])
 
     @staticmethod
@@ -285,10 +285,10 @@ class RPNTargetProcessor(object):
         """
         anc_width, anc_height = anc_scale * anc_rat[0], anc_scale * anc_rat[1]
 
-        x_min = round(stride[0] * (x_pos + 0.5) - anc_width / 2)
-        x_max = round(stride[0] * (x_pos + 0.5) + anc_width / 2)
-        y_min = round(stride[1] * (y_pos + 0.5) - anc_height / 2)
-        y_max = round(stride[1] * (y_pos + 0.5) + anc_height / 2)
+        x_min = stride[0] * (x_pos) - anc_width / 2
+        x_max = stride[0] * (x_pos) + anc_width / 2
+        y_min = stride[1] * (y_pos) - anc_height / 2
+        y_max = stride[1] * (y_pos) + anc_height / 2
 
         return np.array([x_min, y_min, x_max, y_max])
 

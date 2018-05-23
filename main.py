@@ -1,6 +1,5 @@
 import os
 
-print('hahahaha')
 from argparse import ArgumentParser
 from frcnn.logging import get_logger
 from frcnn.tools import denormalize_image
@@ -28,7 +27,7 @@ import numpy as np
 import tensorflow as tf
 from keras.utils import Progbar
 
-from frcnn.debug import FRCNNDebug, visualize_gta, ClassifierDebug
+from frcnn.debug import FRCNNDebug, visualize_gta, ClassifierDebug, RPNTrainerDebug
 from frcnn.classifier_trainer import ClassifierTrainer
 from frcnn.config import singleton_config, Config
 from frcnn.frcnn import FRCNN
@@ -59,10 +58,10 @@ def train_voc(config: Config, train: list, class_mapping: dict):
 
     # Create Model
     frcnn = FRCNN(config, class_mapping, train=True)
-    global_step, _ = frcnn.load_latest_model()
+    global_step, best_loss, checkpoint_filename = frcnn.load_latest_model()
 
     # Progress Bar
-    progbar = Progbar(len(train), width=20, stateful_metrics=['iou', 'gta', 'rpn_c', 'rpn_r'])
+    progbar = Progbar(len(train), width=20, stateful_metrics=['iou', 'gta'])
 
     for epoch in range(100):
         for step in range(len(train)):
@@ -74,7 +73,7 @@ def train_voc(config: Config, train: list, class_mapping: dict):
             rpn_loss = frcnn.rpn_model.train_on_batch(batch_image, [batch_cls, batch_regr])
 
             # Train Classifier Network
-            if global_step % 3 == 0:
+            if False and global_step % 2 == 0:
                 rpn_cls, rpn_reg = frcnn.rpn_model.predict_on_batch(batch_image)
             else:
                 rpn_cls = batch_cls[:, :, :, frcnn.rpn.n_anchor:]
@@ -83,7 +82,7 @@ def train_voc(config: Config, train: list, class_mapping: dict):
             # anchors: (min_x, min_y, max_y, max_y)
             anchors, probs = frcnn.generate_anchors(rpn_cls, rpn_reg)
             anchors, probs = non_max_suppression(anchors, probs, overlap_threshold=0.9, max_box=300)
-            # FRCNNDebug.debug_generate_anchors(batch_image[0].copy(), meta, anchors, probs, batch_cls, batch_regr)
+            # FRCNNDebug.debug_generate_anchors(batch_image[0].copy(), meta, anchors, probs)
 
             # rois: (min_x, min_y, w, h)
             rois, cls_y, reg_y, best_ious = clf_trainer.next_batch(anchors, meta,
@@ -95,12 +94,14 @@ def train_voc(config: Config, train: list, class_mapping: dict):
 
             # DEBUG
             # if cls_y is not None:
-            #     ClassifierDebug.debug_next_batch(batch_image[0].copy(), meta, rois, cls_y, reg_y, class_mapping)
+            #     ClassifierDebug.debug_next_batch(batch_image[0].copy(), meta, rois, cls_y, reg_y,
+            #                                      class_mapping, class_mapping_inv)
 
             clf_loss = frcnn.clf_model.train_on_batch([batch_image, rois], [cls_y, reg_y])
 
-            # DEBUG
-            # cls_pred, anc_pred = frcnn.to_anchors(cls_y, reg_y[:, :, 80:], rois, clf_threshold=0.7)
+            # DEBUG cls_y, reg_y, rois
+            # cls_pred, anc_pred = frcnn.to_anchors(cls_y, reg_y[:, :, 80:], rois, clf_threshold=0.7, meta=meta,
+            #                                       gtas=anchors)
             # anc_pred, cls_pred = non_max_suppression(anc_pred, cls_pred, overlap_threshold=0.8)
             # visualize(batch_image[0].copy(), meta, cls_pred, anc_pred, class_mapping, class_mapping_inv)
 
@@ -189,7 +190,11 @@ def visualize(image, meta, cls_p, anc_p, class_mapping, class_mapping_inv):
 
     # Test Regression
     for anc in anc_p:
-        cv2.rectangle(image, (anc[0], anc[1]), (anc[2], anc[3]), (255, 255, 0))
+        min_x = int(anc[0])
+        min_y = int(anc[1])
+        max_x = int(anc[2])
+        max_y = int(anc[3])
+        cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (255, 255, 0))
 
     cv2.imwrite('temp/{0}'.format(meta['filename']), image)
 
