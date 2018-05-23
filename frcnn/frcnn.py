@@ -243,6 +243,28 @@ class FRCNN(object):
         logger.info('saved ' + filepath)
 
     def load_latest_model(self) -> Tuple[float, float, str]:
+        lat_step, best_loss, filename = self._find_best_checkpoint(mode=0)
+
+        loaded = self.load_weight(os.path.join('checkpoints', filename))
+        if loaded:
+            logger.info('loaded latest checkpoint - ' + filename)
+        else:
+            logger.info('no checkpoint')
+
+        return lat_step, best_loss, filename
+
+    def load_most_accurate_model(self) -> Tuple[float, float, str]:
+        lat_step, best_loss, filename = self._find_best_checkpoint(mode=1)
+
+        loaded = self.load_weight(os.path.join('checkpoints', filename))
+        if loaded:
+            logger.info('loaded latest checkpoint - ' + filename)
+        else:
+            logger.info('no checkpoint')
+
+        return lat_step, best_loss, filename
+
+    def _find_best_checkpoint(self, mode: int) -> Tuple[float, float, str]:
         checkpoints = list()
         for filename in os.listdir('checkpoints'):
             match = re.match(self.CHECKPOINT_REGEX, filename)
@@ -255,51 +277,23 @@ class FRCNN(object):
 
         lat_step = 0
         best_loss = np.inf
-        filename = None
+        filename = str()
 
         if len(checkpoints) >= 1:
-            checkpoints = sorted(checkpoints, key=lambda c: c[0])
+            checkpoints = sorted(checkpoints, key=lambda c: c[mode])
             lat_step, best_loss, filename = checkpoints[-1]
-
-            self.load(os.path.join('checkpoints', filename))
-            logger.info('loaded latest checkpoint - ' + filename)
-        else:
-            logger.info('no checkpoint')
-
         return lat_step, best_loss, filename
 
-    def load_most_accurate_model(self) -> Tuple[float, str]:
-        checkpoints = list()
-        for filename in os.listdir('checkpoints'):
-            match = re.match(self.CHECKPOINT_REGEX, filename)
-            if match is None:
-                continue
-
-            loss = float(match.group('loss'))
-            checkpoints.append((loss, filename))
-
-        lat_loss = None
-        lat_checkpoint = None
-
-        if len(checkpoints) >= 1:
-            checkpoints = sorted(checkpoints, key=lambda c: c[0])
-            lat_loss, lat_checkpoint = checkpoints[0]
-
-            self.load(os.path.join('checkpoints', lat_checkpoint))
-            logger.info('loaded most accurate checkpoint - ' + lat_checkpoint)
-        else:
-            logger.info('no checkpoint')
-
-        return lat_loss, lat_checkpoint
-
-    def load(self, filepath=None):
+    def load_weight(self, filepath=None) -> bool:
         if filepath is None:
             filepath = self._model_path
+
+        if os.path.exists(filepath):
+            return False
 
         if self.train:
             self._model_all.load_weights(filepath)
         else:
             self.rpn_model.load_weights(filepath, by_name=True)
             self.clf_model.load_weights(filepath, by_name=True)
-
-        logger.info('load: ' + filepath)
+        return True
