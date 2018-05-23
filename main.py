@@ -4,6 +4,8 @@ from argparse import ArgumentParser
 from frcnn.logging import get_logger
 from frcnn.tools import denormalize_image
 
+__version__ = 0.1
+
 logger = get_logger(__name__)
 
 # Parser:: Basic Arguments
@@ -73,7 +75,7 @@ def train_voc(config: Config, train: list, class_mapping: dict):
             rpn_loss = frcnn.rpn_model.train_on_batch(batch_image, [batch_cls, batch_regr])
 
             # Train Classifier Network
-            if False and global_step % 2 == 0:
+            if global_step % 2 == 0:
                 rpn_cls, rpn_reg = frcnn.rpn_model.predict_on_batch(batch_image)
             else:
                 rpn_cls = batch_cls[:, :, :, frcnn.rpn.n_anchor:]
