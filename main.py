@@ -1,6 +1,8 @@
 import os
-
 from argparse import ArgumentParser
+
+from traitlets import List
+
 from frcnn.logging import get_logger
 from frcnn.tools import denormalize_image
 
@@ -29,7 +31,7 @@ import numpy as np
 import tensorflow as tf
 from keras.utils import Progbar
 
-from frcnn.debug import FRCNNDebug, visualize_gta, ClassifierDebug, RPNTrainerDebug
+from frcnn.debug import visualize_gta
 from frcnn.classifier_trainer import ClassifierTrainer
 from frcnn.config import singleton_config, Config
 from frcnn.frcnn import FRCNN
@@ -49,6 +51,7 @@ K.set_session(sess)
 
 def train_voc(config: Config, train: list, class_mapping: dict):
     class_mapping_inv = {v: k for k, v in class_mapping.items()}
+    n_cls = len(class_mapping)
 
     # Parameters
     best_loss = np.inf
@@ -63,9 +66,9 @@ def train_voc(config: Config, train: list, class_mapping: dict):
     global_step, best_loss, checkpoint_filename = frcnn.load_latest_model()
 
     # Progress Bar
-    progbar = Progbar(len(train), width=20, stateful_metrics=['iou', 'gta'])
 
     for epoch in range(100):
+        progbar = Progbar(len(train), width=20, stateful_metrics=['iou', 'gta'])
         for step in range(len(train)):
             # Get VOC data and RPN targets
             batch_image, original_image, batch_cls, batch_regr, meta = rpn_trainer.next_batch(debug=False)
@@ -75,7 +78,7 @@ def train_voc(config: Config, train: list, class_mapping: dict):
             rpn_loss = frcnn.rpn_model.train_on_batch(batch_image, [batch_cls, batch_regr])
 
             # Train Classifier Network
-            if global_step % 2 == 0:
+            if False and global_step % 2 == 0:
                 rpn_cls, rpn_reg = frcnn.rpn_model.predict_on_batch(batch_image)
             else:
                 rpn_cls = batch_cls[:, :, :, frcnn.rpn.n_anchor:]
@@ -102,8 +105,8 @@ def train_voc(config: Config, train: list, class_mapping: dict):
             clf_loss = frcnn.clf_model.train_on_batch([batch_image, rois], [cls_y, reg_y])
 
             # DEBUG cls_y, reg_y, rois
-            # cls_pred, anc_pred = frcnn.to_anchors(cls_y, reg_y[:, :, 80:], rois, clf_threshold=0.7, meta=meta,
-            #                                       gtas=anchors)
+            # cls_pred, anc_pred = frcnn.to_anchors(cls_y, reg_y[:, :, (n_cls - 1) * 4:], rois,
+            #                                       clf_threshold=0.7)
             # anc_pred, cls_pred = non_max_suppression(anc_pred, cls_pred, overlap_threshold=0.8)
             # visualize(batch_image[0].copy(), meta, cls_pred, anc_pred, class_mapping, class_mapping_inv)
 
@@ -131,20 +134,6 @@ def train_voc(config: Config, train: list, class_mapping: dict):
                                   ])
             print()
 
-            # DEBUG: check cls_y
-            # check_clf_trainer_classification(cls_y, meta, inv_class_mapping)
-
-            # cls_indices, gta_regs = frcnn.clf_predict(batch_image, anchors, img_meta=meta)
-            # gta_regs, cls_indices = non_max_suppression(gta_regs, cls_indices, overlap_threshold=0.5)
-            # if gta_regs is not None:
-            #     visualize(original_image, meta, gta_regs)
-
-            # Visualize
-            # cls_indices, gta_regs = frcnn.clf_predict(batch_image, anchors, img_meta=meta)
-            # gta_regs, cls_indices = non_max_suppression(gta_regs, cls_indices, overlap_threshold=0.5)
-            # if gta_regs is not None:
-            #     visualize(original_image, meta, gta_regs)
-
 
 def test_voc(config: Config, test: list, class_mapping: dict):
     class_mapping_inv = {v: k for k, v in class_mapping.items()}
@@ -167,12 +156,31 @@ def test_voc(config: Config, test: list, class_mapping: dict):
         # DEBUG
         # FRCNNDebug.debug_generate_anchors(batch_image[0].copy(), meta, anchors, probs)
 
+        # check_rois(f_maps, anchors)
         cls_pred, anc_pred = frcnn.clf_predict(f_maps, anchors, meta=meta)
         anc_pred, cls_pred = non_max_suppression(anc_pred, cls_pred, overlap_threshold=0.8)
         if anc_pred is not None:
             visualize(batch_image[0].copy(), meta, cls_pred, anc_pred, class_mapping, class_mapping_inv)
 
         # if gta_regs is not None:
+
+
+def check_rois(fmap, rois):
+    for roi_idx in range(rois.shape[1]):
+        x = rois[0, roi_idx, 0]
+        y = rois[0, roi_idx, 1]
+        w = rois[0, roi_idx, 2]
+        h = rois[0, roi_idx, 3]
+
+        # row_length = w / float(self.pool_width)
+        # col_length = h / float(self.pool_height)
+
+        x = K.cast(x, 'int32')
+        y = K.cast(y, 'int32')
+        w = K.cast(w, 'int32')
+        h = K.cast(h, 'int32')
+
+        resized = tf.image.resize_images(fmap[:, y:y + h, x:x + w, :], (7, 7))
 
 
 def visualize(image, meta, cls_p, anc_p, class_mapping, class_mapping_inv):
@@ -203,11 +211,16 @@ def visualize(image, meta, cls_p, anc_p, class_mapping, class_mapping_inv):
 
 def main(config: Config):
     # Load data
+    only = ['person', 'car', 'chair', 'bus']
+
     logger.info('loading data')
-    vocdata = PascalVocData(config.data_path)
-    train, test, class_mapping = vocdata.load_data(limit_size=30, add_bg=True)
+    vocdata = PascalVocData(config.data_path, only=only)
+    train, test, class_mapping = vocdata.load_data(add_bg=True)
 
     print(class_mapping)
+    print('train:', len(train))
+    print('test:', len(test))
+    print('only:', only)
 
     # Set Random Seed
     # np.random.seed(0)

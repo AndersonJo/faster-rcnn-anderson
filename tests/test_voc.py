@@ -32,3 +32,13 @@ def test_voc_dataset_integrity():
 
     check(train)
     check(test)
+
+
+def test_voc_dataset_count():
+    voc = PascalVocData('/data/VOCdevkit')
+    train, test, classes = voc.load_data()
+
+    print(len(train))
+
+    # voc.count_class(train)
+    # voc.count_class(test)

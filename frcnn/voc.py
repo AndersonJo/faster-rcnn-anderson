@@ -3,7 +3,7 @@ import os
 import xml.etree.ElementTree as ET
 from abc import ABC, abstractmethod
 from os.path import dirname
-from typing import Tuple
+from typing import Tuple, List, Union
 
 import cv2
 
@@ -24,7 +24,7 @@ class PascalVocData(BaseData):
     # VOC2017 uses val.txt as test data
     TEST_FILES = ('test.txt', 'val.txt')
 
-    def __init__(self, voc_root_path: str, voc_names: tuple = ('VOC2007', 'VOC2012')):
+    def __init__(self, voc_root_path: str, voc_names: tuple = ('VOC2007', 'VOC2012'), only=None):
         """
         :param voc_root_path: the path of "VOCdevkit" including VOC2007 or VOC2012 (i.e. '/data/VOCdevkit')
         :param voc_names: VOC challenge data (i.e. ('VOC2007', 'VOC20010', 'VOC2012'))
@@ -54,13 +54,14 @@ class PascalVocData(BaseData):
         """
         self.voc_root_path = voc_root_path
         self.voc_names = voc_names
+        self.only = only
 
     def load_data(self, limit_size: int = None, need_test: bool = True, add_bg: bool = True) -> Tuple[list, list, dict]:
         """
         Initialization method
         :param limit_size: limit the size of dataset. only use it for debug.
         :param need_test: if True it returns a list of test dataset. if not it returns an empty list.
-        :param add_bg: if True Add 'background' class as 0
+        :param add_bg: if True Add 'background' class as the last one
 
         :return
             - train, test: VOC data
@@ -101,6 +102,8 @@ class PascalVocData(BaseData):
 
             for annot_path in _annotation_paths:
                 annot = self.parse_annotation(annot_path)
+                if annot is None:
+                    continue
 
                 if need_test and annot['filename'] in _test_file_names:
                     test.append(annot)
@@ -117,8 +120,7 @@ class PascalVocData(BaseData):
 
         return train, test, classes
 
-    @staticmethod
-    def parse_annotation(annot_path: str) -> dict:
+    def parse_annotation(self, annot_path: str) -> Union[dict, None]:
         """
         It parses XML VOC annotation file.
         :param annot_path: full path of annotation file
@@ -144,6 +146,9 @@ class PascalVocData(BaseData):
         for el_object in object_els:
             class_name = el_object.find('name').text
 
+            if (self.only is not None) and (class_name not in self.only):
+                continue
+
             bbox = el_object.find('bndbox')
             x1 = int(float(bbox.find('xmin').text))
             y1 = int(float(bbox.find('ymin').text))
@@ -153,6 +158,8 @@ class PascalVocData(BaseData):
             _object = [class_name, x1, y1, x2, y2]
             annot['objects'].append(_object)
 
+        if not len(annot['objects']):
+            return None
         return annot
 
     @staticmethod
@@ -171,3 +178,16 @@ class PascalVocData(BaseData):
         if file:
             cv2.imwrite(file, img)
         return img
+
+    def count_class(self, train):
+        total_objects = dict()
+
+        count = 0
+        for datum in train:
+            for obj in datum['objects']:
+                total_objects.setdefault(obj[0], 0)
+                total_objects[obj[0]] += 1
+            count += 1
+
+        print(total_objects)
+        print(count)

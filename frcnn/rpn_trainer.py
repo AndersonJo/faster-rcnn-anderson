@@ -49,6 +49,7 @@ class RPNTargetProcessor(object):
         The method pre-processes just a single datum (not batch data)
         :param meta: single data point (i.e. VOC Data)
         :param aug: augmentation
+        :param only: only detect the listed classes
         :return:
             - rescaled_image: bigger normalized RGB image which has been rescaled
             - image: original image (BGR and not normalized)
@@ -121,6 +122,7 @@ class RPNTargetProcessor(object):
             gta_coord = self.cal_gta_coordinate(obj_info[1:], width, height, rescaled_width, rescaled_height)
 
             if debug:
+                gta_coord = gta_coord.astype('int')
                 cv2.rectangle(_image, (gta_coord[0], gta_coord[1]), (gta_coord[2], gta_coord[3]), (0, 0, 255))
 
             # anchor box coordinates on the rescaled image
@@ -178,13 +180,13 @@ class RPNTargetProcessor(object):
                 # if debug:
                 #     TestRPN.apply(_image, x_pos, y_pos, anc_scale, anc_rat, reg_target)
 
-                # if debug:
-                #     g_cx, g_cy, g_w, g_h = to_absolute_coord(anchor_coord, reg_target)
-                #     g_x1 = int(g_cx - g_w / 2)
-                #     g_y1 = int(g_cy - g_h / 2)
-                #     g_x2 = int(g_x1 + g_w)
-                #     g_y2 = int(g_y1 + g_h)
-                #     cv2.rectangle(_image, (g_x1 + 2, g_y1 + 2), (g_x2 + 2, g_y2 + 2), (255, 255, 0))
+                if debug:
+                    g_cx, g_cy, g_w, g_h = to_absolute_coord(anchor_coord, reg_target)
+                    g_x1 = int(g_cx - g_w / 2)
+                    g_y1 = int(g_cy - g_h / 2)
+                    g_x2 = int(g_x1 + g_w)
+                    g_y2 = int(g_y1 + g_h)
+                    cv2.rectangle(_image, (g_x1 + 2, g_y1 + 2), (g_x2 + 2, g_y2 + 2), (255, 255, 0), thickness=2)
 
             elif iou < self.min_overlap and not is_valid_anchor:  # Negative anchors
                 y_valid_box[y_pos, x_pos, z_pos] = 1

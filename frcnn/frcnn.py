@@ -145,9 +145,9 @@ class FRCNN(object):
 
         return fen_anchors, probs
 
-    def clf_predict(self, inputs: np.ndarray, anchors: np.ndarray, clf_threshold: float = 0.7, meta=None):
+    def clf_predict(self, feature_maps: np.ndarray, anchors: np.ndarray, clf_threshold: float = 0.7, meta=None):
         """
-        :param inputs: when training, it is batch image. when inference, it is feature maps
+        :param feature_maps: when training, it is batch image. when inference, it is feature maps
         :param anchors: (None, (min_x, min_y, max_x, max_y))
         :param clf_threshold: exclude predicted output which have lower probabilities than clf_threshold
         :return:
@@ -156,7 +156,7 @@ class FRCNN(object):
         reg_pred = list()
         rois = list()
         for roi in self._iter_rois(anchors):  # (min_x, min_y, max_x, max_y) -> (min_x, min_y, w, h)
-            cls_p, reg_p = self.clf_model.predict_on_batch([inputs, roi])
+            cls_p, reg_p = self.clf_model.predict_on_batch([feature_maps, roi])
             cls_pred.append(cls_p)
             reg_pred.append(reg_p)
             rois.append(roi)
@@ -245,7 +245,10 @@ class FRCNN(object):
     def load_latest_model(self) -> Tuple[float, float, str]:
         lat_step, best_loss, filename = self._find_best_checkpoint(mode=0)
 
-        loaded = self.load_weight(os.path.join('checkpoints', filename))
+        loaded = False
+        if filename is not None:
+            loaded = self.load_weight(os.path.join('checkpoints', filename))
+
         if loaded:
             logger.info('loaded latest checkpoint - ' + filename)
         else:
@@ -256,7 +259,10 @@ class FRCNN(object):
     def load_most_accurate_model(self) -> Tuple[float, float, str]:
         lat_step, best_loss, filename = self._find_best_checkpoint(mode=1)
 
-        loaded = self.load_weight(os.path.join('checkpoints', filename))
+        loaded = False
+        if filename is not None:
+            loaded = self.load_weight(os.path.join('checkpoints', filename))
+
         if loaded:
             logger.info('loaded latest checkpoint - ' + filename)
         else:
@@ -277,7 +283,7 @@ class FRCNN(object):
 
         lat_step = 0
         best_loss = np.inf
-        filename = str()
+        filename = None
 
         if len(checkpoints) >= 1:
             checkpoints = sorted(checkpoints, key=lambda c: c[mode])
@@ -288,7 +294,8 @@ class FRCNN(object):
         if filepath is None:
             filepath = self._model_path
 
-        if os.path.exists(filepath):
+        if not os.path.exists(filepath):
+            logger.debug(filepath + ' does not exists')
             return False
 
         if self.train:
