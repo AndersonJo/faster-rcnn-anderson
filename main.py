@@ -1,8 +1,6 @@
 import os
 from argparse import ArgumentParser
 
-from traitlets import List
-
 from frcnn.logging import get_logger
 from frcnn.tools import denormalize_image
 
@@ -31,7 +29,7 @@ import numpy as np
 import tensorflow as tf
 from keras.utils import Progbar
 
-from frcnn.debug import visualize_gta, RPNTrainerDebug, FRCNNDebug
+from frcnn.debug import visualize_gta, RPNTrainerDebug
 from frcnn.classifier_trainer import ClassifierTrainer
 from frcnn.config import singleton_config, Config
 from frcnn.frcnn import FRCNN
@@ -65,14 +63,13 @@ def train_voc(config: Config, train: list, class_mapping: dict):
     frcnn = FRCNN(config, class_mapping, train=True)
     # global_step, best_loss, checkpoint_filename = frcnn.load_latest_model()
 
-    # Progress Bar
-
     for epoch in range(100):
+        # Progress Bar
         progbar = Progbar(len(train), width=10, stateful_metrics=['iou', 'gta'])
         for step in range(len(train)):
             # Get VOC data and RPN targets
             batch_image, original_image, batch_cls, batch_regr, meta = rpn_trainer.next_batch(debug=False)
-            # RPNTrainerDebug.debug_next_batch(batch_image[0].copy(), meta, batch_cls, batch_regr)  # DEBUG
+            RPNTrainerDebug.debug_next_batch(batch_image[0].copy(), meta, batch_cls, batch_regr)  # DEBUG
 
             # Train Region Proposal Network
             rpn_loss = frcnn.rpn_model.train_on_batch(batch_image, [batch_cls, batch_regr])

@@ -54,9 +54,6 @@ class RPNTrainerDebug:
         # Calculate Scales
         scales = calculate_anchor_size()
 
-        # Visualize GTA
-        visualize_gta(image, meta)
-
         height, width, _ = image.shape
         image = denormalize_image(image)
 
@@ -64,19 +61,21 @@ class RPNTrainerDebug:
         cls_h, cls_w, cls_o = np.where(np.logical_and(clsf[0, :, :, :9] == 1, clsf[0, :, :, 9:] == 1))
         regr = regr[0].copy()
 
+
+
         for i in range(len(cls_h)):
             loc_w = cls_w[i]
             loc_h = cls_h[i]
             loc_o = cls_o[i]
 
-            cw = (loc_w + 0.5) * config.anchor_stride[0]
-            ch = (loc_h + 0.5) * config.anchor_stride[1]
+            cw = (loc_w) * config.anchor_stride[0]
+            ch = (loc_h) * config.anchor_stride[1]
 
             anc_w, anc_h = scales[loc_o]
 
             cw = int(cw)
             ch = int(ch)
-            cv2.rectangle(image, (cw, ch), (cw + 5, ch + 5), (0, 255, 255))
+            cv2.rectangle(image, (cw, ch), (cw + 5, ch + 5), (255, 255, 0))
 
             min_x = cw - anc_w / 2
             min_y = ch - anc_h / 2
@@ -97,6 +96,8 @@ class RPNTrainerDebug:
 
             cv2.rectangle(image, (g_x1, g_y1), (g_x2, g_y2), (255, 255, 0), thickness=3)
 
+        # Visualize GTA
+        visualize_gta(image, meta)
         cv2.imwrite('temp/' + meta['filename'], image)
 
 
