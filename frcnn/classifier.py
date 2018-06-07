@@ -191,8 +191,8 @@ class ClassifierNetwork(object):
         return class_loss_regr_fixed_num
 
     @staticmethod
-    def clf_loss(y_true, y_pred):
-        return K.mean(categorical_crossentropy(y_true[0, :, :], y_pred[0, :, :]))
+    def clf_loss(y_true, y_pred, lambda_clf: float = 0.01):
+        return lambda_clf * K.mean(categorical_crossentropy(y_true[0, :, :], y_pred[0, :, :]))
 
     @property
     def model(self) -> Model:

@@ -172,5 +172,3 @@ def test_resnet():
     Model(inputs, outputs=model.outputs[-1])
     # print('[{0}] {1} x {2} = '.format(i, height, width), model.predict(image).shape)
     print()
-    import ipdb
-    ipdb.set_trace()

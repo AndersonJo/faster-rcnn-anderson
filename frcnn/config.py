@@ -40,7 +40,7 @@ class Config:
     ###################################
     # overlaps for RPN
     rpn_min_overlap = 0.1
-    rpn_max_overlap = 0.7
+    rpn_max_overlap = 0.9
 
     ###################################
     # Region of Interests

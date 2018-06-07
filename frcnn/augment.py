@@ -112,7 +112,7 @@ def augment(image, meta):
         angle = np.random.choice([0, 90, 180, 270], 1)[0]
         image, meta = rotate(image, meta, angle)
 
-    choice = np.random.choice([0, 1, 2], p=[0.25, 0.25, 0.5])
+    choice = np.random.choice([0, 1, 2], p=[0.05, 0.05, 0.9])
     if choice == 0:
         mode = np.random.choice(['r', 'g', 'b', 'rgb'], 1)[0]
         image = invert(image, mode)

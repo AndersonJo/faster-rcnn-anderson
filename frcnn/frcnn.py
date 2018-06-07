@@ -227,7 +227,7 @@ class FRCNN(object):
                 new_rois = np.zeros((1, n_roi, 4))
                 new_rois[:, :_n] = sliced_rois
                 try:
-                    new_rois[:, _n:] = rois[:, :n_residual]
+                    new_rois[:, _n:] = rois[0, 0, :]
                 except Exception as e:
                     print(e)
                     import ipdb

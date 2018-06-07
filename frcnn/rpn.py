@@ -66,9 +66,10 @@ class RegionProposalNetwork(object):
         else:
             self.rpn_model = Model(self.fen.image_input, outputs=[self.rpn_cls, self.rpn_reg, self.fen.output])
 
-    def classification_loss(self, n_anchor: int, lambda_cls: float = 0.8, epsilon: float = 1e-9):
+    def classification_loss(self, n_anchor: int, lambda_cls: float = 0.1, epsilon: float = 1e-9):
         """
         :param n_anchor: the number of anchors
+        :param lambda_cls: lambda value
         :param epsilon: ...
         :return: classification loss function for region proposal network
         """
