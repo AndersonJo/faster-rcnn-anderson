@@ -31,7 +31,7 @@ import numpy as np
 import tensorflow as tf
 from keras.utils import Progbar
 
-from frcnn.debug import visualize_gta, RPNTrainerDebug
+from frcnn.debug import visualize_gta, RPNTrainerDebug, FRCNNDebug
 from frcnn.classifier_trainer import ClassifierTrainer
 from frcnn.config import singleton_config, Config
 from frcnn.frcnn import FRCNN
@@ -150,6 +150,9 @@ def test_voc(config: Config, test: list, class_mapping: dict):
         batch_image, original_image, meta = rpn_data.next_batch()
 
         rpn_cls, rpn_reg, f_maps = frcnn.rpn_model.predict_on_batch(batch_image)
+        # DEBUG
+        # FRCNNDebug.debug_predict(batch_image[0].copy(), meta, rpn_cls, rpn_reg)
+
         anchors, probs = frcnn.generate_anchors(rpn_cls, rpn_reg)
         anchors, probs = non_max_suppression(anchors, probs, overlap_threshold=0.7, max_box=300)
 
@@ -160,7 +163,8 @@ def test_voc(config: Config, test: list, class_mapping: dict):
         cls_pred, anc_pred = frcnn.clf_predict(f_maps, anchors, meta=meta)
         anc_pred, cls_pred = non_max_suppression(anc_pred, cls_pred, overlap_threshold=0.5)
         if anc_pred is not None:
-            visualize(batch_image[0].copy(), meta, cls_pred, anc_pred, class_mapping, class_mapping_inv)
+            pass
+            # visualize(batch_image[0].copy(), meta, cls_pred, anc_pred, class_mapping, class_mapping_inv)
 
         # if gta_regs is not None:
 

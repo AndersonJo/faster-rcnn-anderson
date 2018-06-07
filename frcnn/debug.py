@@ -170,14 +170,69 @@ class FRCNNDebug:
             cx = int(cx)
             cy = int(cy)
 
+            import ipdb
+            ipdb.set_trace()
+
             if prob > 0.8:
                 cv2.rectangle(image, (cx - 3, cy - 3), (cx + 3, cy + 3), (255, 255, 0), thickness=2)
-                cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (255 * prob, 255 * prob, 0), thickness=2)
+                # cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (255 * prob, 255 * prob, 0), thickness=2)
             else:
                 cv2.rectangle(image, (cx, cy), (cx + 5, cy + 5), (0, 0, 0), thickness=1)
                 # cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (0, 0, 0), thickness=1)
 
         cv2.imwrite(os.path.join('temp', meta['filename']), image)
+
+    @staticmethod
+    def debug_predict(image, meta, clsf, regr):
+        config = singleton_config()
+
+        # Calculate Scales
+        scales = calculate_anchor_size()
+
+        # Visualize GTA
+        visualize_gta(image, meta)
+
+        height, width, _ = image.shape
+        image = denormalize_image(image)
+
+        # Check Classification
+        cls_h, cls_w, cls_o = np.where(clsf[0, :, :, :] >= 1)
+        regr = regr[0].copy()
+
+        for i in range(len(cls_h)):
+            loc_w = cls_w[i]
+            loc_h = cls_h[i]
+            loc_o = cls_o[i]
+
+            cw = (loc_w + 0.5) * config.anchor_stride[0]
+            ch = (loc_h + 0.5) * config.anchor_stride[1]
+
+            anc_w, anc_h = scales[loc_o]
+
+            cw = int(cw)
+            ch = int(ch)
+            cv2.rectangle(image, (cw, ch), (cw + 5, ch + 5), (0, 255, 255))
+
+            min_x = cw - anc_w / 2
+            min_y = ch - anc_h / 2
+            max_x = cw + anc_w / 2
+            max_y = ch + anc_h / 2
+
+            min_x = int(min_x)
+            min_y = int(min_y)
+            max_x = int(max_x)
+            max_y = int(max_y)
+
+            tx, ty, tw, th = regr[loc_h, loc_w, (loc_o * 4):(loc_o * 4) + 4]
+            g_cx, g_cy, g_w, g_h = to_absolute_coord([min_x, min_y, max_x, max_y], [tx, ty, tw, th])
+            g_x1 = int(g_cx - g_w / 2)
+            g_y1 = int(g_cy - g_h / 2)
+            g_x2 = int(g_x1 + g_w)
+            g_y2 = int(g_y1 + g_h)
+
+            # cv2.rectangle(image, (g_x1, g_y1), (g_x2, g_y2), (255, 255, 0), thickness=1)
+
+        cv2.imwrite('temp/' + meta['filename'], image)
 
 
 class ClassifierDebug:
