@@ -24,7 +24,7 @@ class RPNTargetProcessor(object):
 
     def __init__(self, anchor_scales: List[int], anchor_ratios: List[float],
                  anchor_stride: List[int] = (16, 16), net_name: str = 'vgg16', rescale: bool = True,
-                 min_overlap: float = 0.3, max_overlap: float = 0.6, max_anchor: int = 256):
+                 min_overlap: float = 0.3, max_overlap: float = 0.9, max_anchor: int = 256):
         """
         :param anchor_scales: a list of anchor scales
         :param anchor_ratios: a list of anchor ratios
@@ -195,6 +195,14 @@ class RPNTargetProcessor(object):
             elif not is_valid_anchor:
                 y_valid_box[y_pos, x_pos, z_pos] = 0
                 y_cls_target[y_pos, x_pos, z_pos] = 0
+
+        # Limit Y class target
+        pos_locs = np.where(y_cls_target == 1)
+        if pos_locs[0].shape[0] > 256:
+            val_locs = random.sample(range(len(pos_locs[0])), len(pos_locs[0]) - 256)
+            y_cls_target[pos_locs[0][val_locs], pos_locs[1][val_locs], pos_locs[2][val_locs]] = 0
+
+        assert y_cls_target.sum() <= 256
 
         # Ensure a ground-truth bounding box is mapped to at least one anchor
         for i in range(n_object):

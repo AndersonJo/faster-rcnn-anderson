@@ -66,7 +66,7 @@ class RegionProposalNetwork(object):
         else:
             self.rpn_model = Model(self.fen.image_input, outputs=[self.rpn_cls, self.rpn_reg, self.fen.output])
 
-    def classification_loss(self, n_anchor: int, lambda_cls: float = 0.1, epsilon: float = 1e-9):
+    def classification_loss(self, n_anchor: int, lambda_cls: float = 1., epsilon: float = 1e-9):
         """
         :param n_anchor: the number of anchors
         :param lambda_cls: lambda value
@@ -78,8 +78,8 @@ class RegionProposalNetwork(object):
             cls_y = y_true[:, :, :, n_anchor:]  # Positive objects!
             valid_y = y_true[:, :, :, :n_anchor]  # Positive objects! + Negative objects!
 
-            cross_entropy = valid_y * K.binary_crossentropy(y_pred, cls_y)
-            normalized = cross_entropy / (K.sum(valid_y) + epsilon)
+            cross_entropy = cls_y * K.binary_crossentropy(y_pred, cls_y)
+            normalized = cross_entropy / (K.sum(cls_y) + epsilon)
             loss = K.sum(normalized)
 
             self.tensors['cls_y_true'] = y_true
