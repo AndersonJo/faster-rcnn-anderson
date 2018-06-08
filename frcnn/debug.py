@@ -61,8 +61,6 @@ class RPNTrainerDebug:
         cls_h, cls_w, cls_o = np.where(np.logical_and(clsf[0, :, :, :9] == 1, clsf[0, :, :, 9:] == 1))
         regr = regr[0].copy()
 
-
-
         for i in range(len(cls_h)):
             loc_w = cls_w[i]
             loc_h = cls_h[i]
@@ -171,12 +169,9 @@ class FRCNNDebug:
             cx = int(cx)
             cy = int(cy)
 
-            import ipdb
-            ipdb.set_trace()
-
             if prob > 0.8:
-                cv2.rectangle(image, (cx - 3, cy - 3), (cx + 3, cy + 3), (255, 255, 0), thickness=2)
-                # cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (255 * prob, 255 * prob, 0), thickness=2)
+                cv2.rectangle(image, (cx - 3, cy - 3), (cx + 3, cy + 3), (255, 255, 0), thickness=1)
+                cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (255 * prob, 255 * prob, 0), thickness=1)
             else:
                 cv2.rectangle(image, (cx, cy), (cx + 5, cy + 5), (0, 0, 0), thickness=1)
                 # cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (0, 0, 0), thickness=1)
@@ -190,11 +185,11 @@ class FRCNNDebug:
         # Calculate Scales
         scales = calculate_anchor_size()
 
-        # Visualize GTA
-        visualize_gta(image, meta)
-
         height, width, _ = image.shape
         image = denormalize_image(image)
+
+        # Visualize GTA
+        visualize_gta(image, meta)
 
         # Check Classification
         cls_h, cls_w, cls_o = np.where(clsf[0, :, :, :] >= 1)
@@ -212,7 +207,7 @@ class FRCNNDebug:
 
             cw = int(cw)
             ch = int(ch)
-            cv2.rectangle(image, (cw, ch), (cw + 5, ch + 5), (0, 255, 255))
+            cv2.rectangle(image, (cw, ch), (cw + 5, ch + 5), (255, 255, 0))
 
             min_x = cw - anc_w / 2
             min_y = ch - anc_h / 2
@@ -231,7 +226,7 @@ class FRCNNDebug:
             g_x2 = int(g_x1 + g_w)
             g_y2 = int(g_y1 + g_h)
 
-            # cv2.rectangle(image, (g_x1, g_y1), (g_x2, g_y2), (255, 255, 0), thickness=1)
+            cv2.rectangle(image, (g_x1, g_y1), (g_x2, g_y2), (255, 255, 0), thickness=1)
 
         cv2.imwrite('temp/' + meta['filename'], image)
 

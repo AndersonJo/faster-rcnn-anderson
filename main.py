@@ -29,7 +29,7 @@ import numpy as np
 import tensorflow as tf
 from keras.utils import Progbar
 
-from frcnn.debug import visualize_gta, RPNTrainerDebug
+from frcnn.debug import visualize_gta, RPNTrainerDebug, FRCNNDebug
 from frcnn.classifier_trainer import ClassifierTrainer
 from frcnn.config import singleton_config, Config
 from frcnn.frcnn import FRCNN
@@ -69,7 +69,7 @@ def train_voc(config: Config, train: list, class_mapping: dict):
         for step in range(len(train)):
             # Get VOC data and RPN targets
             batch_image, original_image, batch_cls, batch_regr, meta = rpn_trainer.next_batch(debug=False)
-            RPNTrainerDebug.debug_next_batch(batch_image[0].copy(), meta, batch_cls, batch_regr)  # DEBUG
+            # RPNTrainerDebug.debug_next_batch(batch_image[0].copy(), meta, batch_cls, batch_regr)  # DEBUG
 
             # Train Region Proposal Network
             rpn_loss = frcnn.rpn_model.train_on_batch(batch_image, [batch_cls, batch_regr])
@@ -148,7 +148,7 @@ def test_voc(config: Config, test: list, class_mapping: dict):
 
         rpn_cls, rpn_reg, f_maps = frcnn.rpn_model.predict_on_batch(batch_image)
         # DEBUG
-        # FRCNNDebug.debug_predict(batch_image[0].copy(), meta, rpn_cls, rpn_reg)
+        FRCNNDebug.debug_predict(batch_image[0].copy(), meta, rpn_cls, rpn_reg)
 
         anchors, probs = frcnn.generate_anchors(rpn_cls, rpn_reg)
         anchors, probs = non_max_suppression(anchors, probs, overlap_threshold=0.7, max_box=300)
